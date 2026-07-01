@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Anime list</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- 启动画面 -->
+    <div id="splashScreen" style="position:fixed;inset:0;z-index:99999;background:#f8f9fb;display:flex;align-items:center;justify-content:center;transition:opacity 0.4s ease;">
+        <img src="1.png" style="width:100%;height:100%;object-fit:cover;" alt="">
+    </div>
+
+    <!-- 主应用容器 -->
+    <div id="app"></div>
+
+    <!-- 隐藏的文件选择器 -->
+    <input type="file" id="importFileInput" accept=".json" style="display:none;">
+
+    <!-- 导入弹窗 -->
+    <div id="pasteModal" style="display:none;">
+        <div class="paste-modal-overlay" id="pasteOverlay"></div>
+        <div class="paste-modal">
+            <div class="paste-modal-title">导入数据</div>
+            <div id="importSelectView">
+                <div class="import-choice" id="importFileChoice">
+                    <span style="font-size:1.25rem;">📁</span>
+                    <span>从文件导入</span>
+                </div>
+                <div class="import-choice" id="importPasteChoice">
+                    <span style="font-size:1.25rem;">📋</span>
+                    <span>粘贴 JSON 导入</span>
+                </div>
+            </div>
+            <div id="importPasteView" style="display:none;">
+                <textarea class="paste-textarea" id="pasteTextarea" placeholder="将 JSON 文本粘贴到这里…"></textarea>
+                <div class="paste-modal-actions">
+                    <button class="btn btn-secondary" id="pasteBackBtn">返回</button>
+                    <button class="btn btn-primary" id="pasteConfirmBtn">导入</button>
+                </div>
+            </div>
+            <div class="paste-modal-actions" id="importSelectActions">
+                <button class="btn btn-secondary" id="pasteCancelBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出筛选弹窗 -->
+    <div id="exportFilterModal" style="display:none;">
+        <div class="paste-modal-overlay" id="exportFilterOverlay"></div>
+        <div class="paste-modal" style="max-height:70vh;overflow-y:auto;">
+            <div class="paste-modal-title">选择导出范围</div>
+            <div id="exportFilterContent"></div>
+            <div class="paste-modal-actions">
+                <button class="btn btn-secondary" id="exportFilterSelectAll">全选</button>
+                <button class="btn btn-secondary" id="exportFilterCancelBtn">取消</button>
+                <button class="btn btn-primary" id="exportFilterConfirmBtn">导出所选</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出方式选择弹窗 -->
+    <div id="exportChoiceModal" style="display:none;">
+        <div class="paste-modal-overlay" id="exportChoiceOverlay"></div>
+        <div class="paste-modal">
+            <div class="paste-modal-title">选择导出方式</div>
+            <div class="import-choice" id="exportChoiceText">
+                <span style="font-size:1.25rem;">📋</span>
+                <span>复制纯文字</span>
+            </div>
+            <div class="import-choice" id="exportChoiceFile">
+                <span style="font-size:1.25rem;">📁</span>
+                <span>导出为 JSON 文件</span>
+            </div>
+            <div class="paste-modal-actions">
+                <button class="btn btn-secondary" id="exportChoiceCancelBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出结果弹窗（纯文本展示） -->
+    <div id="exportResultModal" style="display:none;">
+        <div class="paste-modal-overlay" id="exportResultOverlay"></div>
+        <div class="paste-modal">
+            <div class="paste-modal-title">导出结果</div>
+            <textarea class="paste-textarea" id="exportResultTextarea" readonly placeholder="暂无数据"></textarea>
+            <div class="paste-modal-actions">
+                <button class="btn btn-secondary" id="exportResultCloseBtn">关闭</button>
+                <button class="btn btn-primary" id="exportResultCopyBtn">复制到剪贴板</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 模块 - 按依赖顺序加载 -->
+    <script src="js/constants.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/events.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

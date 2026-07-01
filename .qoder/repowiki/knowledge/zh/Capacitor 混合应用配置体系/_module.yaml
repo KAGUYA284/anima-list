@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: configuration_system
+title: Capacitor 混合应用配置体系
+scope: []
+source_files:
+    - capacitor.config.ts
+    - package.json
+    - android/variables.gradle
+    - android/gradle.properties
+    - android/app/build.gradle
+    - android/app/src/main/assets/capacitor.config.json
+depends_on: []
+related_to: []

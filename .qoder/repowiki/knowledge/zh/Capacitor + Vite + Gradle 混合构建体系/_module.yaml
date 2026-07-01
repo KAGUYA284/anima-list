@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: build_system
+title: Capacitor + Vite + Gradle 混合构建体系
+scope: []
+source_files:
+    - package.json
+    - capacitor.config.ts
+    - android/build.gradle
+    - android/app/build.gradle
+    - android/variables.gradle
+    - android/app/capacitor.build.gradle
+depends_on: []
+related_to: []

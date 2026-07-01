@@ -1,0 +1,36 @@
+// ============================================================
+// 常量定义 - Anime Tracker
+// ============================================================
+
+/** 观看状态配置 */
+const STATUS_CONFIG = {
+    want: { label: '想看', class: 'status-want' },
+    watching: { label: '在看', class: 'status-watching' },
+    paused: { label: '搁置', class: 'status-paused' },
+    completed: { label: '已看完', class: 'status-completed' },
+    dropped: { label: '放弃', class: 'status-dropped' }
+};
+
+/** localStorage 键名 */
+const STORAGE_KEY = 'anime-tracker-data';
+const COLLAPSE_KEY = 'anime-tracker-collapse';
+
+/** 日本动画季度边界定义（用于番剧按季归类） */
+const QUARTER_BOUNDARIES = {
+    '冬': { months: [1, 2, 3], lastWeekDay: 25, next: '春', nextYearOffset: 0 },
+    '春': { months: [4, 5, 6], lastWeekDay: 24, next: '夏', nextYearOffset: 0 },
+    '夏': { months: [7, 8, 9], lastWeekDay: 24, next: '秋', nextYearOffset: 0 },
+    '秋': { months: [10, 11, 12], lastWeekDay: 25, next: '冬', nextYearOffset: 1 }
+};
+
+/** 星期映射 */
+const WEEK_DAYS = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+/** 追番/补番类型配置 */
+const TYPE_CONFIG = {
+    chasing: { label: '追番', class: 'type-chasing' },
+    binge: { label: '补', class: 'type-binge' }
+};
+
+/** 季度排序顺序 */
+const QUARTER_ORDER = ['秋', '夏', '春', '冬', ''];

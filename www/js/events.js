@@ -1,0 +1,895 @@
+// ============================================================
+// 事件处理 - Anime Tracker
+// ============================================================
+
+/** 绑定列表页事件 */
+function attachListEvents() {
+    // 移动端检测
+    if (window.Capacitor || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        document.body.classList.add('is-mobile');
+    } else {
+        document.body.classList.remove('is-mobile');
+    }
+
+    // Android 状态栏安全区域兜底（CSS env() 可能返回 0）
+    if (/Android/i.test(navigator.userAgent)) {
+        const header = document.querySelector('.header');
+        if (header) {
+            const ptop = parseFloat(getComputedStyle(header).paddingTop);
+            // 如果 env(safe-area-inset-top) 为 0，补充最小安全间距
+            if (ptop < 20) {
+                header.style.paddingTop = (ptop + 24) + 'px';
+            }
+        }
+    }
+
+    // 筛选按钮
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setState({ filter: btn.dataset.filter });
+        });
+    });
+
+    // 搜索输入（支持中文输入法组合）
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        let composing = false;
+        const doSearch = (val) => {
+            state.searchQuery = val;
+            render();
+            const si = document.getElementById('searchInput');
+            if (si) {
+                si.focus();
+                si.setSelectionRange(val.length, val.length);
+            }
+        };
+        searchInput.addEventListener('compositionstart', () => { composing = true; });
+        searchInput.addEventListener('compositionend', (e) => {
+            composing = false;
+            doSearch(e.target.value);
+        });
+        searchInput.addEventListener('input', (e) => {
+            if (!composing) {
+                doSearch(e.target.value);
+            }
+        });
+    }
+
+    // 年份折叠/展开
+    document.querySelectorAll('[data-toggle="year"]').forEach(header => {
+        header.addEventListener('click', () => {
+            const targetId = header.dataset.target;
+            const content = document.getElementById(targetId);
+            const icon = document.getElementById(targetId + '-icon');
+            if (!content || !icon) return;
+            const isCollapsed = content.classList.contains('collapsed');
+            const saved = loadCollapsed();
+            if (isCollapsed) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = '9999px';
+                icon.classList.remove('collapsed');
+                saveCollapsed(saved.filter(id => id !== targetId));
+            } else {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0px';
+                icon.classList.add('collapsed');
+                if (!saved.includes(targetId)) saved.push(targetId);
+                saveCollapsed(saved);
+            }
+        });
+    });
+
+    // 季度折叠/展开
+    document.querySelectorAll('[data-toggle="quarter"]').forEach(header => {
+        header.addEventListener('click', () => {
+            const targetId = header.dataset.target;
+            const content = document.getElementById(targetId);
+            const icon = document.getElementById(targetId + '-icon');
+            if (!content || !icon) return;
+            const isCollapsed = content.classList.contains('collapsed');
+            const saved = loadCollapsed();
+            if (isCollapsed) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = '9999px';
+                icon.classList.remove('collapsed');
+                saveCollapsed(saved.filter(id => id !== targetId));
+            } else {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0px';
+                icon.classList.add('collapsed');
+                if (!saved.includes(targetId)) saved.push(targetId);
+                saveCollapsed(saved);
+            }
+        });
+    });
+
+    // 添加按钮
+    const addBtn = document.getElementById('addAnimeBtn');
+    const addFirstBtn = document.getElementById('addFirstAnime');
+    if (addBtn) addBtn.addEventListener('click', () => setState({ currentPage: 'add' }));
+    if (addFirstBtn) addFirstBtn.addEventListener('click', () => setState({ currentPage: 'add' }));
+
+    // 番剧卡片点击 → 详情页
+    document.querySelectorAll('.anime-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const id = card.dataset.id;
+            const anime = getAnimeById(id);
+            setState({ currentPage: 'detail', currentAnime: anime });
+        });
+    });
+
+    // +1 按钮
+    document.querySelectorAll('[data-plus]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.plus;
+            const anime = getAnimeById(id);
+            if (!anime) return;
+            let newEpisode = anime.currentEpisode + 1;
+            let newStatus = anime.status;
+            if (newEpisode > anime.totalEpisodes) {
+                newEpisode = anime.totalEpisodes;
+            }
+            if (newEpisode === anime.totalEpisodes && anime.totalEpisodes > 0) {
+                newStatus = 'completed';
+            } else if (newEpisode > 0 && anime.status === 'want') {
+                newStatus = 'watching';
+            }
+            updateAnime(id, { currentEpisode: newEpisode, status: newStatus });
+        });
+    });
+
+    // ======== 导出功能 ========
+    const exportBtn = document.getElementById('exportBtn');
+    const exportFilterModal = document.getElementById('exportFilterModal');
+    const exportFilterOverlay = document.getElementById('exportFilterOverlay');
+    const exportFilterContent = document.getElementById('exportFilterContent');
+    const exportFilterSelectAll = document.getElementById('exportFilterSelectAll');
+    const exportFilterCancelBtn = document.getElementById('exportFilterCancelBtn');
+    const exportFilterConfirmBtn = document.getElementById('exportFilterConfirmBtn');
+    // 导出方式选择弹窗
+    const exportChoiceModal = document.getElementById('exportChoiceModal');
+    const exportChoiceOverlay = document.getElementById('exportChoiceOverlay');
+    const exportChoiceText = document.getElementById('exportChoiceText');
+    const exportChoiceFile = document.getElementById('exportChoiceFile');
+    const exportChoiceCancelBtn = document.getElementById('exportChoiceCancelBtn');
+    // 导出结果弹窗（纯文字）
+    const exportResultModal = document.getElementById('exportResultModal');
+    const exportResultOverlay = document.getElementById('exportResultOverlay');
+    const exportResultTextarea = document.getElementById('exportResultTextarea');
+    const exportResultCloseBtn = document.getElementById('exportResultCloseBtn');
+    const exportResultCopyBtn = document.getElementById('exportResultCopyBtn');
+
+    let pendingExportData = null; // 暂存筛选后的数据
+
+    if (exportBtn && exportFilterModal) {
+        exportBtn.addEventListener('click', () => {
+            buildExportFilter();
+            exportFilterModal.style.display = 'block';
+        });
+        exportFilterOverlay.addEventListener('click', () => {
+            exportFilterModal.style.display = 'none';
+        });
+        exportFilterCancelBtn.addEventListener('click', () => {
+            exportFilterModal.style.display = 'none';
+        });
+        exportFilterSelectAll.addEventListener('click', () => {
+            const cbs = exportFilterContent.querySelectorAll('input[type="checkbox"]');
+            const allChecked = Array.from(cbs).every(cb => cb.checked);
+            cbs.forEach(cb => { cb.checked = !allChecked; });
+        });
+        exportFilterConfirmBtn.addEventListener('click', async () => {
+            exportFilterModal.style.display = 'none';
+            const map = {};
+            document.querySelectorAll('.export-check-row').forEach(row => {
+                const cb = row.querySelector('input[type="checkbox"]');
+                const year = row.dataset.year;
+                if (!year) return;
+                if (!map[year]) map[year] = { year: year, quarters: {} };
+                const quarter = row.dataset.quarter;
+                map[year].quarters[quarter || ''] = cb.checked;
+            });
+            pendingExportData = buildFilteredData(map);
+            if (pendingExportData.length === 0) {
+                showToast('未选择任何数据');
+                return;
+            }
+            // 显示导出方式选择弹窗
+            if (exportChoiceModal) exportChoiceModal.style.display = 'block';
+        });
+    }
+
+    // ======== 导出方式选择弹窗 ========
+    function closeExportChoice() {
+        if (exportChoiceModal) exportChoiceModal.style.display = 'none';
+        pendingExportData = null;
+    }
+
+    if (exportChoiceModal) {
+        exportChoiceOverlay?.addEventListener('click', closeExportChoice);
+        exportChoiceCancelBtn?.addEventListener('click', closeExportChoice);
+        exportChoiceText?.addEventListener('click', () => {
+            exportChoiceModal.style.display = 'none';
+            const data = pendingExportData;
+            pendingExportData = null;
+            if (data) doExportText(data);
+        });
+        exportChoiceFile?.addEventListener('click', () => {
+            exportChoiceModal.style.display = 'none';
+            const data = pendingExportData;
+            pendingExportData = null;
+            if (data) doExportFile(data);
+        });
+    }
+
+    // ======== 导出结果弹窗（纯文字） ========
+    function closeExportResult() {
+        if (exportResultModal) exportResultModal.style.display = 'none';
+    }
+
+    if (exportResultModal) {
+        exportResultOverlay?.addEventListener('click', closeExportResult);
+        exportResultCloseBtn?.addEventListener('click', closeExportResult);
+        exportResultCopyBtn?.addEventListener('click', async () => {
+            const text = exportResultTextarea?.value;
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('已复制到剪贴板');
+            } catch {
+                if (exportResultTextarea) {
+                    exportResultTextarea.focus();
+                    exportResultTextarea.select();
+                    document.execCommand('copy');
+                    showToast('已复制到剪贴板');
+                }
+            }
+        });
+    }
+
+    // ======== 导入功能 ========
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('importFileInput');
+    const pasteModal = document.getElementById('pasteModal');
+    const pasteOverlay = document.getElementById('pasteOverlay');
+    const pasteTextarea = document.getElementById('pasteTextarea');
+    const pasteCancelBtn = document.getElementById('pasteCancelBtn');
+    const pasteBackBtn = document.getElementById('pasteBackBtn');
+    const pasteConfirmBtn = document.getElementById('pasteConfirmBtn');
+    const importFileChoice = document.getElementById('importFileChoice');
+    const importPasteChoice = document.getElementById('importPasteChoice');
+    const importSelectView = document.getElementById('importSelectView');
+    const importPasteView = document.getElementById('importPasteView');
+    const importSelectActions = document.getElementById('importSelectActions');
+    const pasteTitle = pasteModal?.querySelector('.paste-modal-title');
+
+    function closePasteModal() {
+        pasteModal.style.display = 'none';
+        importSelectView.style.display = 'block';
+        importPasteView.style.display = 'none';
+        importSelectActions.style.display = 'block';
+        pasteTextarea.value = '';
+        if (pasteTitle) pasteTitle.textContent = '导入数据';
+    }
+
+    function showPasteView() {
+        importSelectView.style.display = 'none';
+        importPasteView.style.display = 'block';
+        importSelectActions.style.display = 'none';
+        if (pasteTitle) pasteTitle.textContent = '粘贴 JSON 数据';
+        pasteTextarea.focus();
+    }
+
+    if (importBtn && pasteModal) {
+        importBtn.addEventListener('click', () => { pasteModal.style.display = 'block'; });
+        pasteOverlay.addEventListener('click', closePasteModal);
+        pasteCancelBtn.addEventListener('click', closePasteModal);
+
+        importFileChoice.addEventListener('click', () => {
+            pasteModal.style.display = 'none';
+            fileInput.click();
+        });
+
+        importPasteChoice.addEventListener('click', showPasteView);
+        pasteBackBtn.addEventListener('click', () => {
+            importSelectView.style.display = 'block';
+            importPasteView.style.display = 'none';
+            importSelectActions.style.display = 'block';
+            if (pasteTitle) pasteTitle.textContent = '导入数据';
+            pasteTextarea.value = '';
+        });
+
+        pasteConfirmBtn.addEventListener('click', () => {
+            const raw = pasteTextarea.value.trim();
+            if (!raw) return;
+            try {
+                const imported = JSON.parse(raw);
+                if (!Array.isArray(imported)) {
+                    alert('数据格式错误：需要 JSON 数组');
+                    return;
+                }
+                closePasteModal();
+                doImportJson(imported);
+            } catch (e) {
+                alert('JSON 格式错误：' + e.message);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const imported = JSON.parse(reader.result);
+                    if (!Array.isArray(imported)) {
+                        alert('文件格式错误');
+                        return;
+                    }
+                    doImportJson(imported);
+                } catch (e) {
+                    alert('文件解析失败：' + e.message);
+                }
+            };
+            reader.readAsText(file);
+            fileInput.value = '';
+        });
+    }
+}
+
+/** 构建导出筛选弹窗内容 */
+function buildExportFilter() {
+    const groups = buildGroups(state.animeList);
+    const years = Object.keys(groups).sort((a, b) => {
+        if (a === '未分类') return 1;
+        if (b === '未分类') return -1;
+        return parseInt(b) - parseInt(a);
+    });
+    let html = '';
+    years.forEach(year => {
+        html += `<div class="export-year-group">`;
+        html += `<div class="export-year-title">${year}年</div>`;
+        const quartersInYear = Object.keys(groups[year]).sort((a, b) => {
+            return QUARTER_ORDER.indexOf(a) - QUARTER_ORDER.indexOf(b);
+        });
+        quartersInYear.forEach(quarter => {
+            const count = groups[year][quarter].length;
+            const label = quarter ? quarter + '季' : '未归类';
+            html += `<label class="export-check-row export-quarter-row" data-year="${year}" data-quarter="${quarter || ''}">`;
+            html += `<input type="checkbox" checked> ${label}（${count}部）</label>`;
+        });
+        html += `</div>`;
+    });
+    const exportFilterContent = document.getElementById('exportFilterContent');
+    if (exportFilterContent) {
+        exportFilterContent.innerHTML = html || '<div style="color:#9ca3af;text-align:center;padding:1rem;">暂无数据</div>';
+    }
+}
+
+/** 构建年/季分组 */
+function buildGroups(animeList) {
+    const groups = {};
+    animeList.forEach(anime => {
+        let year = '未分类';
+        let quarter = '';
+        const groupDate = anime.type === 'binge'
+            ? (anime.startDate || anime.airDate || '')
+            : (anime.airDate || '');
+        if (groupDate) {
+            const parts = groupDate.split('-');
+            if (parts.length >= 2) {
+                year = parts[0];
+                const month = parseInt(parts[1]);
+                if (anime.type === 'binge') {
+                    if (month >= 1 && month <= 3) quarter = '冬';
+                    else if (month >= 4 && month <= 6) quarter = '春';
+                    else if (month >= 7 && month <= 9) quarter = '夏';
+                    else if (month >= 10 && month <= 12) quarter = '秋';
+                } else if (parts.length >= 3) {
+                    const day = parseInt(parts[2]);
+                    let baseQuarter = '';
+                    for (const [q, info] of Object.entries(QUARTER_BOUNDARIES)) {
+                        if (info.months.includes(month)) { baseQuarter = q; break; }
+                    }
+                    if (baseQuarter) {
+                        const info = QUARTER_BOUNDARIES[baseQuarter];
+                        const lastMonth = info.months[info.months.length - 1];
+                        if (month === lastMonth && day >= info.lastWeekDay) {
+                            quarter = info.next;
+                            if (info.nextYearOffset > 0) year = String(parseInt(year) + info.nextYearOffset);
+                        } else { quarter = baseQuarter; }
+                    }
+                } else {
+                    if (month >= 1 && month <= 3) quarter = '冬';
+                    else if (month >= 4 && month <= 6) quarter = '春';
+                    else if (month >= 7 && month <= 9) quarter = '夏';
+                    else if (month >= 10 && month <= 12) quarter = '秋';
+                }
+            }
+        }
+        if (!groups[year]) groups[year] = {};
+        if (!groups[year][quarter]) groups[year][quarter] = [];
+        groups[year][quarter].push(anime);
+    });
+    return groups;
+}
+
+/** 根据 map 筛选数据 */
+function buildFilteredData(map) {
+    const selected = [];
+    const groups = buildGroups(state.animeList);
+    for (const [year, yearInfo] of Object.entries(map)) {
+        if (!groups[year]) continue;
+        for (const [quarter, checked] of Object.entries(yearInfo.quarters)) {
+            if (checked && groups[year][quarter]) {
+                for (const anime of groups[year][quarter]) {
+                    selected.push(anime);
+                }
+            }
+        }
+    }
+    return selected;
+}
+
+/** 导出为纯文字 — 在弹窗中展示 JSON */
+function doExportText(selected) {
+    const json = JSON.stringify(selected, null, 2);
+    const resultModal = document.getElementById('exportResultModal');
+    const resultTextarea = document.getElementById('exportResultTextarea');
+    if (resultModal && resultTextarea) {
+        resultTextarea.value = json;
+        resultTextarea.style.height = 'auto';
+        resultTextarea.style.height = Math.min(resultTextarea.scrollHeight, window.innerHeight * 0.6) + 'px';
+        resultModal.style.display = 'block';
+    }
+}
+
+/** 导出为 JSON 文件 */
+async function doExportFile(selected) {
+    const json = JSON.stringify(selected, null, 2);
+    const filename = 'Anime list.json';
+
+    // 策略1: File System Access API (桌面浏览器)
+    if (window.showSaveFilePicker) {
+        const blob = new Blob([json], { type: 'application/json' });
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: filename,
+                types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            showToast(`导出成功 — ${selected.length} 部番剧`);
+        } catch (e) {
+            if (e.name !== 'AbortError') showToast('导出失败');
+        }
+        return;
+    }
+
+    // 策略2: Capacitor Filesystem + Share (Android/iOS)
+    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Filesystem) {
+        try {
+            const result = await Capacitor.Plugins.Filesystem.writeFile({
+                path: filename,
+                data: json,
+                directory: 'CACHE'
+            });
+            if (Capacitor.Plugins.Share) {
+                await Capacitor.Plugins.Share.share({
+                    title: 'Anime list',
+                    url: result.uri,
+                    dialogTitle: '导出追番数据'
+                });
+                showToast(`导出成功 — ${selected.length} 部番剧`);
+                return;
+            }
+        } catch (e) {
+            console.error('[Export] FileSystem export failed:', e);
+        }
+    }
+
+    // 策略3: Blob 下载 (兜底)
+    try {
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(`导出成功 — ${selected.length} 部番剧`);
+    } catch (e) {
+        console.error('[Export] Blob download failed:', e);
+        showToast('导出失败，请稍后重试');
+    }
+}
+
+/** 执行导入合并（以番剧名称为合并键） */
+function doImportJson(imported) {
+    const localCount = state.animeList.length;
+    const cloudCount = imported.length;
+    const merged = new Map();
+    state.animeList.forEach(item => merged.set(item.title, item));
+    imported.forEach(item => {
+        merged.set(item.title, item);
+    });
+    const result = Array.from(merged.values());
+    const msg = `本地：${localCount} 条\n导入数据：${cloudCount} 条\n合并后：${result.length} 条\n\n相同番剧名将被新数据覆盖，确认导入？`;
+    if (!confirm(msg)) return;
+    saveToStorage(result);
+    setState({ animeList: result });
+    setTimeout(() => showToast('导入成功'), 100);
+}
+
+/** 绑定详情页事件 */
+function attachDetailEvents() {
+    const anime = state.currentAnime;
+    if (!anime) return;
+
+    document.getElementById('backToList').addEventListener('click', () => {
+        setState({ currentPage: 'list', currentAnime: null });
+    });
+
+    document.getElementById('editAnime').addEventListener('click', () => {
+        setState({ currentPage: 'edit' });
+    });
+
+    document.getElementById('deleteAnime').addEventListener('click', () => {
+        if (confirm(`确定要删除《${anime.title}》吗？此操作不可撤销。`)) {
+            deleteAnime(anime.id);
+        }
+    });
+
+    document.getElementById('progressMinus').addEventListener('click', () => {
+        const newEpisode = Math.max(0, anime.currentEpisode - 1);
+        const updates = { currentEpisode: newEpisode };
+        if (newEpisode === 0) {
+            updates.status = 'want';
+        } else if (anime.status === 'completed' && newEpisode < anime.totalEpisodes) {
+            updates.status = 'watching';
+        }
+        updateAnime(anime.id, updates);
+        setState({ currentAnime: getAnimeById(anime.id) });
+    });
+
+    document.getElementById('progressPlus').addEventListener('click', () => {
+        let newEpisode = anime.currentEpisode + 1;
+        let newStatus = anime.status;
+
+        if (newEpisode > anime.totalEpisodes) {
+            newEpisode = anime.totalEpisodes;
+        }
+
+        if (newEpisode === anime.totalEpisodes && anime.totalEpisodes > 0) {
+            newStatus = 'completed';
+        } else if (newEpisode > 0 && anime.status === 'want') {
+            newStatus = 'watching';
+        }
+
+        updateAnime(anime.id, { currentEpisode: newEpisode, status: newStatus });
+        setState({ currentAnime: getAnimeById(anime.id) });
+    });
+
+    document.querySelectorAll('#detailRating .rating-star').forEach(star => {
+        star.addEventListener('click', () => {
+            const rating = parseInt(star.dataset.rating);
+            const newRating = anime.rating === rating ? 0 : rating;
+            updateAnime(anime.id, { rating: newRating });
+            setState({ currentAnime: getAnimeById(anime.id) });
+        });
+    });
+
+    document.querySelectorAll('[data-status]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            updateAnime(anime.id, { status: btn.dataset.status });
+            setState({ currentAnime: getAnimeById(anime.id) });
+        });
+    });
+
+    const reviewEl = document.getElementById('detailReview');
+    let reviewTimeout;
+    reviewEl.addEventListener('input', () => {
+        clearTimeout(reviewTimeout);
+        reviewTimeout = setTimeout(() => {
+            updateAnime(anime.id, { review: reviewEl.value });
+        }, 500);
+    });
+}
+
+/** 绑定表单页事件 */
+function attachFormEvents(anime) {
+    const isEdit = !!anime;
+    let formData = {
+        status: anime?.status || 'watching',
+        rating: anime?.rating || 0,
+        type: anime?.type || 'chasing'
+    };
+
+    document.getElementById('backToList').addEventListener('click', () => {
+        setState({ currentPage: 'list', currentAnime: null });
+    });
+
+    // ======== 集数滚轮 ========
+    const epItems = document.getElementById('epItems');
+    const epMinus = document.getElementById('epMinus');
+    const epPlus = document.getElementById('epPlus');
+    const formCurrent = document.getElementById('formCurrent');
+    const formTotal = document.getElementById('formTotal');
+
+    function getTotal() {
+        return Math.max(1, parseInt(formTotal.value) || 1);
+    }
+
+    function getCurrent() {
+        return parseInt(formCurrent.value) || 0;
+    }
+
+    function setCurrent(val) {
+        formCurrent.value = val;
+        buildWheel(val);
+    }
+
+    function buildWheel(scrollToVal) {
+        const total = getTotal();
+        let html = '';
+        for (let i = 0; i <= total; i++) {
+            html += `<div class="episode-picker-item" data-ep="${i}">${i}</div>`;
+        }
+        epItems.innerHTML = html;
+        scrollToEpisode(scrollToVal != null ? scrollToVal : getCurrent());
+    }
+
+    function scrollToEpisode(val) {
+        const item = epItems.querySelector(`[data-ep="${val}"]`);
+        if (item) {
+            const scrollTop = item.offsetTop - epItems.offsetTop - 3 * epItems.clientHeight / 9;
+            epItems.scrollTop = Math.max(0, scrollTop);
+        }
+        updateActiveItem();
+    }
+
+    function updateActiveItem() {
+        const items = epItems.querySelectorAll('.episode-picker-item');
+        const center = epItems.scrollTop + epItems.clientHeight / 2;
+        let best = null;
+        let bestDist = Infinity;
+        items.forEach(item => {
+            const mid = item.offsetTop + item.offsetHeight / 2 - epItems.offsetTop;
+            const dist = Math.abs(mid - center);
+            if (dist < bestDist) { bestDist = dist; best = item; }
+        });
+        items.forEach(i => i.classList.remove('active'));
+        if (best) {
+            best.classList.add('active');
+            formCurrent.value = best.dataset.ep;
+        }
+    }
+
+    buildWheel(parseInt(formCurrent.value) || 0);
+
+    let wheelTimeout;
+    epItems.addEventListener('scroll', () => {
+        clearTimeout(wheelTimeout);
+        updateActiveItem();
+        wheelTimeout = setTimeout(() => {
+            const val = parseInt(formCurrent.value) || 0;
+            scrollToEpisode(val);
+        }, 200);
+    }, { passive: true });
+
+    epMinus.addEventListener('click', () => {
+        setCurrent(Math.max(0, getCurrent() - 1));
+    });
+
+    epPlus.addEventListener('click', () => {
+        const max = getTotal();
+        setCurrent(Math.min(max, getCurrent() + 1));
+    });
+
+    formTotal.addEventListener('input', () => {
+        formCurrent.value = Math.min(getTotal(), parseInt(formCurrent.value) || 0);
+        buildWheel();
+    });
+
+    // ======== 类型切换 ========
+    document.querySelectorAll('[data-form-type]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            formData.type = btn.dataset.formType;
+            updateFormTypeUI(formData.type);
+        });
+    });
+
+    // ======== 状态切换 ========
+    document.querySelectorAll('[data-form-status]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            formData.status = btn.dataset.formStatus;
+            updateFormStatusUI(formData.status);
+        });
+    });
+
+    // ======== 评分切换 ========
+    document.querySelectorAll('#formRating .rating-star').forEach(star => {
+        star.addEventListener('click', () => {
+            const rating = parseInt(star.dataset.rating);
+            formData.rating = formData.rating === rating ? 0 : rating;
+            updateFormRatingUI(formData.rating);
+        });
+    });
+
+    // ======== 保存 ========
+    document.getElementById('saveAnime').addEventListener('click', (e) => {
+        e.preventDefault();
+
+        const title = document.getElementById('formTitle').value.trim();
+        if (!title) {
+            alert('请输入番剧名称');
+            return;
+        }
+
+        const duplicate = state.animeList.find(a => a.title === title && a.id !== anime?.id);
+        if (duplicate) {
+            alert(`番剧「${title}」已存在，不能重复添加`);
+            return;
+        }
+
+        const totalEpisodes = Math.max(1, parseInt(document.getElementById('formTotal').value) || 1);
+        const currentEpisode = Math.min(totalEpisodes, Math.max(0, parseInt(document.getElementById('formCurrent').value) || 0));
+        const review = document.getElementById('formReview').value;
+
+        let airDate = '';
+        let updateWeekDay = '';
+        let completedDate = '';
+        let startDate = '';
+
+        if (formData.type === 'chasing') {
+            airDate = document.getElementById('formAirDate')?.value || '';
+            updateWeekDay = getWeekDayFromDate(airDate);
+        } else {
+            airDate = document.getElementById('formBingeAirDate')?.value || '';
+            startDate = document.getElementById('formAirDateBinge')?.value || '';
+            completedDate = document.getElementById('formCompletedDate')?.value || '';
+        }
+
+        let status = formData.status;
+        if (currentEpisode === 0) {
+            status = 'want';
+        } else if (currentEpisode >= totalEpisodes && totalEpisodes > 0) {
+            status = 'completed';
+        }
+
+        const data = {
+            title,
+            totalEpisodes,
+            currentEpisode,
+            status,
+            rating: formData.rating,
+            review,
+            airDate,
+            type: formData.type,
+            updateWeekDay,
+            completedDate,
+            startDate
+        };
+
+        if (isEdit) {
+            updateAnime(anime.id, data);
+            setState({
+                currentPage: 'list',
+                currentAnime: null
+            });
+        } else {
+            addAnime(data);
+        }
+    });
+
+    // ======== Bangumi 搜索 ========
+    const bgmResults = document.getElementById('bgmResults');
+    const formTitle = document.getElementById('formTitle');
+    if (bgmResults && formTitle) {
+        let debounceTimer;
+        let lastKeyword = '';
+
+        const doSearch = async (keyword) => {
+            if (!keyword) {
+                bgmResults.style.display = 'none';
+                return;
+            }
+            if (keyword === lastKeyword) return;
+            lastKeyword = keyword;
+
+            bgmResults.style.display = 'block';
+            bgmResults.innerHTML = '<div class="bgm-loading">搜索中...</div>';
+
+            let subjects = [];
+            try {
+                subjects = await searchBangumi(keyword);
+            } catch (e) {
+                bgmResults.innerHTML = '<div class="bgm-loading" style="color:#f87171;">搜索失败，请重试</div>';
+                return;
+            }
+
+            if (subjects.length === 0) {
+                bgmResults.innerHTML = '<div class="bgm-loading">未找到相关番剧</div>';
+                return;
+            }
+
+            bgmResults.innerHTML = subjects.map(item => {
+                const cn = item.name_cn && item.name_cn !== item.name ? item.name_cn : '';
+                const date = item.date || '';
+                return `
+                    <div class="bgm-result-item" data-bgm-id="${item.id}">
+                        <div>
+                            <span class="bgm-result-name">${escHtml(item.name)}</span>
+                            ${cn ? `<span class="bgm-result-cn">${escHtml(cn)}</span>` : ''}
+                        </div>
+                        <span class="bgm-result-meta">${date}</span>
+                    </div>
+                `;
+            }).join('');
+
+            bgmResults.querySelectorAll('.bgm-result-item').forEach(item => {
+                item.addEventListener('click', async () => {
+                    const id = item.dataset.bgmId;
+                    item.innerHTML = '<div class="bgm-loading">加载详情...</div>';
+                    try {
+                        const detail = await getBangumiSubject(id);
+                        if (!detail) throw new Error('No data');
+
+                        document.getElementById('formTitle').value = detail.name_cn || detail.name;
+                        document.getElementById('formTotal').value = detail.total_episodes || 12;
+                        document.getElementById('formTotal').readOnly = true;
+                        document.getElementById('formTotal').title = '总集数已自动填入，不可手动修改';
+
+                        if (detail.date) {
+                            const isChasing = (formData.type || 'chasing') === 'chasing';
+                            if (isChasing) {
+                                const airDateInput = document.getElementById('formAirDate');
+                                if (airDateInput) airDateInput.value = detail.date;
+                                const wd = getWeekDayFromDate(detail.date);
+                                const infoEl = document.getElementById('chasingWeekdayInfo');
+                                if (infoEl && wd) {
+                                    infoEl.style.display = 'block';
+                                    infoEl.textContent = '📅 ' + WEEK_DAYS[wd] + '更新';
+                                }
+                            } else {
+                                const bingeAirDate = document.getElementById('formBingeAirDate');
+                                if (bingeAirDate) bingeAirDate.value = detail.date;
+                            }
+                        }
+
+                        bgmResults.style.display = 'none';
+                        lastKeyword = detail.name_cn || detail.name || '';
+                        showToast('已自动填写番剧信息');
+                    } catch (e) {
+                        item.innerHTML = '<div class="bgm-loading" style="color:#f87171;">加载失败</div>';
+                    }
+                });
+            });
+        };
+
+        formTitle.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            const keyword = formTitle.value.trim();
+            if (keyword.length < 2) {
+                bgmResults.style.display = 'none';
+                return;
+            }
+            debounceTimer = setTimeout(() => doSearch(keyword), 500);
+        });
+
+        formTitle.addEventListener('focus', () => {
+            const keyword = formTitle.value.trim();
+            if (keyword.length >= 2 && lastKeyword !== keyword) {
+                clearTimeout(debounceTimer);
+                doSearch(keyword);
+            }
+        });
+
+        formTitle.addEventListener('blur', () => {
+            setTimeout(() => { bgmResults.style.display = 'none'; }, 200);
+        });
+    }
+}

@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: dependency_management
+title: 混合应用依赖管理：NPM与Gradle双轨制
+scope: []
+source_files:
+    - package.json
+    - package-lock.json
+    - android/build.gradle
+    - android/app/build.gradle
+    - android/variables.gradle
+    - android/settings.gradle
+    - capacitor.config.ts
+depends_on: []
+related_to: []
