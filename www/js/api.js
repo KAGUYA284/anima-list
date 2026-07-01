@@ -28,3 +28,14 @@ async function getBangumiSubject(id) {
     if (!res.ok) return null;
     return res.json();
 }
+
+/**
+ * 获取 Bangumi 番剧角色与声优列表
+ * @param {number|string} id - Bangumi 条目 ID
+ * @returns {Promise<Array>} 角色列表
+ */
+async function getBangumiCharacters(id) {
+    const res = await fetch('https://api.bgm.tv/v0/subjects/' + id + '/characters');
+    if (!res.ok) return [];
+    return res.json();
+}

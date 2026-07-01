@@ -597,6 +597,147 @@ function attachDetailEvents() {
             updateAnime(anime.id, { review: reviewEl.value });
         }, 500);
     });
+
+    // ======== Bangumi 详情加载 ========
+    if (anime.bgmId) {
+        loadBangumiDetailInto(anime.bgmId);
+    }
+
+    // ======== 单集记录编辑 ========
+    document.querySelectorAll('.episode-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const ep = parseInt(item.dataset.ep);
+            showEpisodeEditor(anime, ep);
+        });
+    });
+}
+
+/** 加载 Bangumi 详情（异步渲染到 #bangumiDetail） */
+async function loadBangumiDetailInto(bgmId) {
+    const container = document.getElementById('bangumiDetail');
+    if (!container) return;
+    container.innerHTML = '<div class="bgm-loading">加载番剧详情...</div>';
+
+    const [subject, characters] = await Promise.all([
+        getBangumiSubject(bgmId),
+        getBangumiCharacters(bgmId)
+    ]);
+
+    if (!subject) {
+        container.innerHTML = '';
+        return;
+    }
+
+    // 提取动画制作公司
+    let studio = '';
+    if (subject.infobox) {
+        const studioItem = subject.infobox.find(i => i.key === '动画制作' || i.key === '制作' || i.key === '原作');
+        if (studioItem) {
+            studio = typeof studioItem.value === 'string' ? studioItem.value : (studioItem.value[0] || '');
+        }
+    }
+
+    const cover = subject.images?.large || '';
+    const summary = subject.summary || '';
+
+    container.innerHTML = `
+        <div class="bgm-detail">
+            ${cover ? `<div class="bgm-cover"><img src="${cover}" alt="封面"></div>` : ''}
+            <div class="bgm-info">
+                ${summary ? `<p class="bgm-summary">${escHtml(summary)}</p>` : ''}
+                ${studio ? `<div class="info-row"><span class="info-label">动画制作</span><span>${escHtml(studio)}</span></div>` : ''}
+            </div>
+        </div>
+        ${characters.length > 0 ? `
+            <h3 style="font-size:0.875rem;font-weight:600;color:#374151;margin:0.5rem 0 0.25rem;">角色 · 声优</h3>
+            <div class="bgm-characters">
+                ${characters.slice(0, 8).map(c => `
+                    <div class="bgm-character">
+                        ${c.images?.grid ? `<img src="${c.images.grid}" alt="${escHtml(c.name)}" class="char-avatar">` : '<div class="char-avatar char-avatar-placeholder"></div>'}
+                        <div class="char-info">
+                            <span class="char-name">${escHtml(c.name)}</span>
+                            ${c.actors?.[0] ? `<span class="char-cv">CV: ${escHtml(c.actors[0].name)}</span>` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        ` : ''}
+    `;
+}
+
+/** 显示单集编辑弹窗 */
+function showEpisodeEditor(anime, episodeNum) {
+    const notes = anime.episodeNotes || {};
+    const ep = notes[episodeNum] || {};
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ep-editor-overlay';
+
+    let starHtml = '';
+    for (let i = 1; i <= 5; i++) {
+        starHtml += `<span class="rating-star ${i <= (ep.rating || 0) ? 'filled' : 'empty'}" data-sr="${i}">★</span>`;
+    }
+
+    overlay.innerHTML = `
+        <div class="ep-editor">
+            <div class="ep-editor-title">第 ${episodeNum} 集记录</div>
+            <textarea id="epNoteInput" placeholder="写下这一集的感想...">${escHtml(ep.note || '')}</textarea>
+            <div class="ep-editor-stars" id="epEditorStars">
+                ${starHtml}
+            </div>
+            <div class="ep-editor-actions">
+                <button class="btn btn-secondary" id="epEditorDelete">删除</button>
+                <button class="btn btn-primary" id="epEditorSave">保存</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    let rating = ep.rating || 0;
+
+    // 点击星星
+    overlay.querySelectorAll('#epEditorStars .rating-star').forEach(star => {
+        star.addEventListener('click', () => {
+            rating = parseInt(star.dataset.sr);
+            overlay.querySelectorAll('#epEditorStars .rating-star').forEach((s, idx) => {
+                s.className = 'rating-star' + (idx < rating ? ' filled' : ' empty');
+            });
+        });
+    });
+
+    // 保存
+    document.getElementById('epEditorSave').addEventListener('click', () => {
+        const noteText = document.getElementById('epNoteInput').value.trim();
+        const currentAnime = getAnimeById(anime.id);
+        if (!currentAnime) return;
+
+        const currentNotes = { ...(currentAnime.episodeNotes || {}) };
+        if (noteText || rating > 0) {
+            currentNotes[episodeNum] = { note: noteText, rating };
+        } else {
+            delete currentNotes[episodeNum];
+        }
+        updateAnime(anime.id, { episodeNotes: currentNotes });
+        setState({ currentAnime: getAnimeById(anime.id) });
+        overlay.remove();
+    });
+
+    // 删除
+    document.getElementById('epEditorDelete').addEventListener('click', () => {
+        const currentAnime = getAnimeById(anime.id);
+        if (!currentAnime) return;
+        const currentNotes = { ...(currentAnime.episodeNotes || {}) };
+        delete currentNotes[episodeNum];
+        updateAnime(anime.id, { episodeNotes: currentNotes });
+        setState({ currentAnime: getAnimeById(anime.id) });
+        overlay.remove();
+    });
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
 }
 
 /** 绑定表单页事件 */
@@ -605,8 +746,10 @@ function attachFormEvents(anime) {
     let formData = {
         status: anime?.status || 'watching',
         rating: anime?.rating || 0,
-        type: anime?.type || 'chasing'
+        type: anime?.type || 'chasing',
+        bgmId: anime?.bgmId || ''
     };
+    let selectedBgmId = anime?.bgmId || '';
 
     document.getElementById('backToList').addEventListener('click', () => {
         setState({ currentPage: 'list', currentAnime: null });
@@ -771,7 +914,8 @@ function attachFormEvents(anime) {
             type: formData.type,
             updateWeekDay,
             completedDate,
-            startDate
+            startDate,
+            bgmId: selectedBgmId || (anime?.bgmId || '')
         };
 
         if (isEdit) {
@@ -833,6 +977,8 @@ function attachFormEvents(anime) {
             bgmResults.querySelectorAll('.bgm-result-item').forEach(item => {
                 item.addEventListener('click', async () => {
                     const id = item.dataset.bgmId;
+                    selectedBgmId = id;
+                    formData.bgmId = id;
                     item.innerHTML = '<div class="bgm-loading">加载详情...</div>';
                     try {
                         const detail = await getBangumiSubject(id);

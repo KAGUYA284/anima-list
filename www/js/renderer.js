@@ -295,6 +295,9 @@ function renderDetailPage() {
                 </div>
             </div>
 
+            <!-- Bangumi 详情区域（通过 JS 异步加载） -->
+            <div id="bangumiDetail" class="detail-section"></div>
+
             <div class="detail-section">
                 <h2 class="detail-section-title">基本信息</h2>
                 ${anime.airDate ? `
@@ -347,6 +350,13 @@ function renderDetailPage() {
                             ${config.label}
                         </button>
                     `).join('')}
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h2 class="detail-section-title">📋 集数记录</h2>
+                <div id="episodeNotes">
+                    ${renderEpisodeNotes(anime)}
                 </div>
             </div>
 
@@ -626,4 +636,25 @@ function showReminder() {
             overlay.remove();
         }
     });
+}
+
+/** 渲染单集记录 */
+function renderEpisodeNotes(anime) {
+    const total = anime.totalEpisodes || 0;
+    if (total === 0) return '<div style="color:#9ca3af;text-align:center;padding:0.5rem;">暂无集数数据</div>';
+    const notes = anime.episodeNotes || {};
+    let html = '<div class="episode-grid">';
+    for (let i = 1; i <= total; i++) {
+        const ep = notes[i] || {};
+        const hasNote = ep.note || ep.rating;
+        html += `
+            <div class="episode-item ${hasNote ? 'episode-done' : ''}" data-ep="${i}">
+                <div class="ep-num">第${i}集</div>
+                <div class="ep-note">${escHtml(ep.note || '')}</div>
+                ${ep.rating ? `<div class="ep-rating">${'★'.repeat(ep.rating)}${'☆'.repeat(5 - ep.rating)}</div>` : ''}
+            </div>
+        `;
+    }
+    html += '</div>';
+    return html;
 }
