@@ -37,3 +37,20 @@ function saveCollapsed(ids) {
         localStorage.setItem(COLLAPSE_KEY, JSON.stringify(ids));
     } catch (e) {}
 }
+
+/** 加载设置 */
+function loadSettings() {
+    try {
+        const data = localStorage.getItem(SETTINGS_KEY);
+        return data ? JSON.parse(data) : {};
+    } catch {
+        return {};
+    }
+}
+
+/** 保存设置 */
+function saveSettings(settings) {
+    try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) {}
+}

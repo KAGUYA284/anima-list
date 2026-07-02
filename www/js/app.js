@@ -22,7 +22,7 @@ if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App) {
     Capacitor.Plugins.App.addListener('backButton', () => {
         if (state.currentPage === 'detail') {
             setState({ currentPage: 'list', currentAnime: null });
-        } else if (state.currentPage === 'add' || state.currentPage === 'edit') {
+        } else if (state.currentPage === 'add' || state.currentPage === 'edit' || state.currentPage === 'settings') {
             setState({ currentPage: 'list', currentAnime: null });
         } else {
             if (!window._exitTimer) {

@@ -4,6 +4,13 @@
 
 /** 主渲染分发器：根据当前页面状态渲染对应视图 */
 function render() {
+    // 应用深色模式
+    if (state.settings.darkMode) {
+        document.body.classList.add('dark-mode');
+    } else {
+        document.body.classList.remove('dark-mode');
+    }
+
     const app = document.getElementById('app');
 
     switch (state.currentPage) {
@@ -23,6 +30,10 @@ function render() {
             app.innerHTML = renderFormPage(state.currentAnime);
             attachFormEvents(state.currentAnime);
             break;
+        case 'settings':
+            app.innerHTML = renderSettingsPage();
+            attachSettingsEvents();
+            break;
     }
 }
 
@@ -38,8 +49,12 @@ function renderListPage() {
                     <div class="header-subtitle">${filtered.length} 部番剧</div>
                 </div>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
-                    <button class="btn btn-secondary" id="exportBtn" style="font-size:0.75rem;padding:0.375rem 0.625rem;">导出</button>
-                    <button class="btn btn-secondary" id="importBtn" style="font-size:0.75rem;padding:0.375rem 0.625rem;">导入</button>
+                    <button class="btn btn-icon" id="settingsBtn" title="设置">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                    </button>
                     <button class="btn btn-primary" id="addAnimeBtn">
                         <span>+</span>
                         <span>添加</span>
@@ -221,12 +236,45 @@ function renderAnimeList(animeList) {
 }
 
 /** 渲染单个番剧卡片 */
+const coverCache = {};
+
 function renderAnimeCard(anime) {
     const progress = anime.totalEpisodes > 0
         ? (anime.currentEpisode / anime.totalEpisodes) * 100
         : 0;
     const statusConfig = STATUS_CONFIG[anime.status];
     const typeLabel = TYPE_CONFIG[anime.type]?.label || '';
+
+    if (state.settings.listStyle === 'cover') {
+        const cachedCover = anime.bgmId ? coverCache[anime.bgmId] : null;
+        return `
+            <div class="anime-card anime-card-cover" data-id="${anime.id}" data-bgmid="${anime.bgmId || ''}">
+                <div class="card-cover-thumb">
+                    ${cachedCover
+                        ? `<img src="${cachedCover}" alt="" class="card-cover-img" loading="lazy">`
+                        : `<div class="card-cover-placeholder">${anime.title.charAt(0)}</div>`
+                    }
+                    ${!cachedCover && anime.bgmId
+                        ? `<img class="card-cover-img card-cover-lazy" data-src="${anime.bgmId}" alt="" style="display:none;">`
+                        : ''}
+                </div>
+                <div class="card-cover-info">
+                    <div class="card-title">${anime.title}</div>
+                    <div class="card-meta">
+                        <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
+                        ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}</span>` : ''}
+                    </div>
+                    <div class="card-progress-cover">
+                        <span class="progress-text">${anime.currentEpisode}/${anime.totalEpisodes}</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%;"></div>
+                        </div>
+                    </div>
+                    ${anime.status !== 'dropped' && anime.status !== 'completed' ? `<button class="card-plus-one" data-plus="${anime.id}">+1</button>` : ''}
+                </div>
+            </div>
+        `;
+    }
 
     return `
         <div class="anime-card" data-id="${anime.id}">
@@ -657,4 +705,118 @@ function renderEpisodeNotes(anime) {
     }
     html += '</div>';
     return html;
+}
+
+/** 渲染设置页 */
+function renderSettingsPage() {
+    const currentStyle = state.settings.listStyle;
+    const isDark = state.settings.darkMode;
+    const apiEndpoint = state.settings.apiEndpoint;
+    return `
+        <header class="header">
+            <div class="header-content">
+                <button class="btn btn-secondary" id="backFromSettings">
+                    ← 返回
+                </button>
+                <span class="header-title" style="font-size:1.125rem;">设置</span>
+                <div style="width:2.5rem;"></div>
+            </div>
+        </header>
+
+        <div class="settings-page">
+            <div class="settings-section">
+                <h2 class="settings-section-title">列表显示</h2>
+                <div class="settings-row">
+                    <span class="settings-label">列表样式</span>
+                    <div class="settings-toggle">
+                        <button class="toggle-btn ${currentStyle === 'text' ? 'active' : ''}" data-style="text">
+                            仅文字
+                        </button>
+                        <button class="toggle-btn ${currentStyle === 'cover' ? 'active' : ''}" data-style="cover">
+                            封面模式
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2 class="settings-section-title">外观</h2>
+                <div class="settings-row">
+                    <span class="settings-label">深色模式</span>
+                    <div class="settings-toggle">
+                        <button class="toggle-btn ${!isDark ? 'active' : ''}" data-dark="false">
+                            浅色
+                        </button>
+                        <button class="toggle-btn ${isDark ? 'active' : ''}" data-dark="true">
+                            深色
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2 class="settings-section-title">API 接口</h2>
+                <div class="settings-row">
+                    <span class="settings-label">Bangumi 访问方式</span>
+                    <div class="settings-toggle">
+                        <button class="toggle-btn ${apiEndpoint === 'direct' ? 'active' : ''}" data-api="direct">
+                            直连
+                        </button>
+                        <button class="toggle-btn ${apiEndpoint === 'proxy1' ? 'active' : ''}" data-api="proxy1">
+                            代理1
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2 class="settings-section-title">数据管理</h2>
+                <div class="settings-row">
+                    <span class="settings-label">导出数据</span>
+                    <button class="btn btn-secondary" id="settingsExportBtn">选择导出</button>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-label">导入数据</span>
+                    <button class="btn btn-secondary" id="settingsImportBtn">选择导入</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2 class="settings-section-title">关于</h2>
+                <div class="settings-row">
+                    <span class="settings-label">版本</span>
+                    <span style="color:#9ca3af;font-size:0.875rem;">2.0.0</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/** 异步加载列表中所有番剧的封面图片 */
+async function loadListCovers() {
+    const lazyImgs = document.querySelectorAll('.card-cover-lazy');
+    if (lazyImgs.length === 0) return;
+    const bgmIds = [...new Set(Array.from(lazyImgs).map(el => el.dataset.src))];
+    await Promise.all(bgmIds.map(async (bgmId) => {
+        if (coverCache[bgmId]) return;
+        try {
+            const subject = await getBangumiSubject(bgmId);
+            if (subject?.images?.medium) {
+                coverCache[bgmId] = subject.images.medium;
+            }
+        } catch (e) {}
+    }));
+    document.querySelectorAll('.card-cover-lazy').forEach(el => {
+        const id = el.dataset.src;
+        if (coverCache[id]) {
+            el.src = coverCache[id];
+            el.style.display = 'block';
+            el.classList.remove('card-cover-lazy');
+            const thumb = el.closest('.card-cover-thumb');
+            if (thumb) {
+                const placeholder = thumb.querySelector('.card-cover-placeholder');
+                if (placeholder) placeholder.style.display = 'none';
+            }
+        }
+    });
 }

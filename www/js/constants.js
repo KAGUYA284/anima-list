@@ -14,6 +14,7 @@ const STATUS_CONFIG = {
 /** localStorage 键名 */
 const STORAGE_KEY = 'anime-tracker-data';
 const COLLAPSE_KEY = 'anime-tracker-collapse';
+const SETTINGS_KEY = 'anime-tracker-settings';
 
 /** 日本动画季度边界定义（用于番剧按季归类） */
 const QUARTER_BOUNDARIES = {

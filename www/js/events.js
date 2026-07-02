@@ -109,6 +109,10 @@ function attachListEvents() {
     if (addBtn) addBtn.addEventListener('click', () => setState({ currentPage: 'add' }));
     if (addFirstBtn) addFirstBtn.addEventListener('click', () => setState({ currentPage: 'add' }));
 
+    // 设置按钮
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (settingsBtn) settingsBtn.addEventListener('click', () => setState({ currentPage: 'settings' }));
+
     // 番剧卡片点击 → 详情页
     document.querySelectorAll('.anime-card').forEach(card => {
         card.addEventListener('click', () => {
@@ -140,7 +144,6 @@ function attachListEvents() {
     });
 
     // ======== 导出功能 ========
-    const exportBtn = document.getElementById('exportBtn');
     const exportFilterModal = document.getElementById('exportFilterModal');
     const exportFilterOverlay = document.getElementById('exportFilterOverlay');
     const exportFilterContent = document.getElementById('exportFilterContent');
@@ -162,11 +165,8 @@ function attachListEvents() {
 
     let pendingExportData = null; // 暂存筛选后的数据
 
-    if (exportBtn && exportFilterModal) {
-        exportBtn.addEventListener('click', () => {
-            buildExportFilter();
-            exportFilterModal.style.display = 'block';
-        });
+    // 导出筛选弹窗事件（无条件绑定，元素始终在 HTML 中）
+    if (exportFilterModal) {
         exportFilterOverlay.addEventListener('click', () => {
             exportFilterModal.style.display = 'none';
         });
@@ -248,7 +248,6 @@ function attachListEvents() {
     }
 
     // ======== 导入功能 ========
-    const importBtn = document.getElementById('importBtn');
     const fileInput = document.getElementById('importFileInput');
     const pasteModal = document.getElementById('pasteModal');
     const pasteOverlay = document.getElementById('pasteOverlay');
@@ -280,8 +279,8 @@ function attachListEvents() {
         pasteTextarea.focus();
     }
 
-    if (importBtn && pasteModal) {
-        importBtn.addEventListener('click', () => { pasteModal.style.display = 'block'; });
+    // 导入弹窗事件（无条件绑定，元素始终在 HTML 中）
+    if (pasteModal) {
         pasteOverlay.addEventListener('click', closePasteModal);
         pasteCancelBtn.addEventListener('click', closePasteModal);
 
@@ -334,6 +333,11 @@ function attachListEvents() {
             reader.readAsText(file);
             fileInput.value = '';
         });
+    }
+
+    // 封面模式加载番剧封面
+    if (state.settings.listStyle === 'cover') {
+        setTimeout(() => loadListCovers(), 100);
     }
 }
 
@@ -600,7 +604,11 @@ function attachDetailEvents() {
 
     // ======== Bangumi 详情加载 ========
     if (anime.bgmId) {
-        loadBangumiDetailInto(anime.bgmId);
+        loadBangumiDetailInto(anime.bgmId).catch(e => {
+            console.error('[Detail] Bangumi 详情加载失败:', e);
+            const container = document.getElementById('bangumiDetail');
+            if (container) container.innerHTML = '';
+        });
     }
 
     // ======== 单集记录编辑 ========
@@ -640,28 +648,45 @@ async function loadBangumiDetailInto(bgmId) {
     const cover = subject.images?.large || '';
     const summary = subject.summary || '';
 
+    // 角色头像 HTML（带加载失败回退）
+    function avatarHtml(c) {
+        var imgUrl = c.images?.grid || c.images?.small || c.images?.medium || '';
+        if (imgUrl) {
+            return '<div class="char-avatar-wrap"><img src="' + imgUrl + '" alt="' + escHtml(c.name) + '" class="char-avatar" onerror="var p=this.parentNode;p.classList.add(\'char-avatar-fallback\');this.remove();"></div>';
+        }
+        return '<div class="char-avatar char-avatar-placeholder"></div>';
+    }
+
+    // 按 relation 排序（主角优先，其次配角，其次客串/闲角/旁白）
+    const roleOrder = { '主角': 1, '配角': 2, '客串': 3, '闲角': 4, '旁白': 5 };
+    const sortedChars = [...characters].sort((a, b) => {
+        const ra = roleOrder[a.relation] || 99;
+        const rb = roleOrder[b.relation] || 99;
+        return ra - rb;
+    });
+
     container.innerHTML = `
         <div class="bgm-detail">
             ${cover ? `<div class="bgm-cover"><img src="${cover}" alt="封面"></div>` : ''}
             <div class="bgm-info">
                 ${summary ? `<p class="bgm-summary">${escHtml(summary)}</p>` : ''}
-                ${studio ? `<div class="info-row"><span class="info-label">动画制作</span><span>${escHtml(studio)}</span></div>` : ''}
             </div>
         </div>
-        ${characters.length > 0 ? `
-            <h3 style="font-size:0.875rem;font-weight:600;color:#374151;margin:0.5rem 0 0.25rem;">角色 · 声优</h3>
+        ${sortedChars.length > 0 ? `
+            <h3 style="font-size:0.875rem;font-weight:600;color:#374151;margin:0.75rem 0 0.25rem;">角色 · 声优</h3>
             <div class="bgm-characters">
-                ${characters.slice(0, 8).map(c => `
+                ${sortedChars.map(c => `
                     <div class="bgm-character">
-                        ${c.images?.grid ? `<img src="${c.images.grid}" alt="${escHtml(c.name)}" class="char-avatar">` : '<div class="char-avatar char-avatar-placeholder"></div>'}
+                        ${avatarHtml(c)}
                         <div class="char-info">
-                            <span class="char-name">${escHtml(c.name)}</span>
+                            <span class="char-name">${escHtml(c.name)}${c.relation === '主角' ? ' <span class="char-badge">主角</span>' : ''}</span>
                             ${c.actors?.[0] ? `<span class="char-cv">CV: ${escHtml(c.actors[0].name)}</span>` : ''}
                         </div>
                     </div>
                 `).join('')}
             </div>
         ` : ''}
+        ${studio ? `<div class="bgm-studio"><span class="info-label">动画制作</span><span>${escHtml(studio)}</span></div>` : ''}
     `;
 }
 
@@ -782,7 +807,8 @@ function attachFormEvents(anime) {
             html += `<div class="episode-picker-item" data-ep="${i}">${i}</div>`;
         }
         epItems.innerHTML = html;
-        scrollToEpisode(scrollToVal != null ? scrollToVal : getCurrent());
+        const val = scrollToVal != null ? scrollToVal : getCurrent();
+        scrollToEpisode(val);
     }
 
     function scrollToEpisode(val) {
@@ -835,6 +861,34 @@ function attachFormEvents(anime) {
     formTotal.addEventListener('input', () => {
         formCurrent.value = Math.min(getTotal(), parseInt(formCurrent.value) || 0);
         buildWheel();
+    });
+
+    // ======== 点击滚轮直接编辑 ========
+    epWheel.addEventListener('click', () => {
+        if (epWheel.querySelector('.wheel-edit-input')) return;
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'form-input wheel-edit-input';
+        input.value = getCurrent();
+        input.min = 0;
+        input.max = getTotal();
+        input.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;text-align:center;font-size:1rem;font-weight:700;z-index:5;border:none;border-radius:0.375rem;background:rgba(233,69,96,0.1);';
+        epWheel.style.position = 'relative';
+        epWheel.appendChild(input);
+        input.focus();
+        input.select();
+        const finishEdit = () => {
+            if (!input.parentNode) return;
+            const val = parseInt(input.value) || 0;
+            const clamped = Math.max(0, Math.min(getTotal(), val));
+            input.remove();
+            setCurrent(clamped);
+        };
+        input.addEventListener('blur', finishEdit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            if (e.key === 'Escape') { input.remove(); }
+        });
     });
 
     // ======== 类型切换 ========
@@ -985,9 +1039,9 @@ function attachFormEvents(anime) {
                         if (!detail) throw new Error('No data');
 
                         document.getElementById('formTitle').value = detail.name_cn || detail.name;
-                        document.getElementById('formTotal').value = detail.total_episodes || 12;
-                        document.getElementById('formTotal').readOnly = true;
-                        document.getElementById('formTotal').title = '总集数已自动填入，不可手动修改';
+                        const ftEl = document.getElementById('formTotal');
+                        ftEl.value = detail.total_episodes || 12;
+                        ftEl.dispatchEvent(new Event('input', { bubbles: true }));
 
                         if (detail.date) {
                             const isChasing = (formData.type || 'chasing') === 'chasing';
@@ -1036,6 +1090,70 @@ function attachFormEvents(anime) {
 
         formTitle.addEventListener('blur', () => {
             setTimeout(() => { bgmResults.style.display = 'none'; }, 200);
+        });
+    }
+}
+
+/** 绑定设置页事件 */
+function attachSettingsEvents() {
+    // 返回按钮
+    document.getElementById('backFromSettings').addEventListener('click', () => {
+        setState({ currentPage: 'list' });
+    });
+
+    // 列表样式切换
+    document.querySelectorAll('.toggle-btn[data-style]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const style = btn.dataset.style;
+            if (style !== state.settings.listStyle) {
+                updateSettings({ listStyle: style });
+            }
+        });
+    });
+
+    // 深色模式切换
+    document.querySelectorAll('.toggle-btn[data-dark]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const isDark = btn.dataset.dark === 'true';
+            if (isDark !== state.settings.darkMode) {
+                updateSettings({ darkMode: isDark });
+            }
+        });
+    });
+
+    // API 接口选择切换
+    document.querySelectorAll('.toggle-btn[data-api]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const endpoint = btn.dataset.api;
+            if (endpoint !== state.settings.apiEndpoint) {
+                updateSettings({ apiEndpoint: endpoint });
+            }
+        });
+    });
+
+    // 导出按钮
+    const settingsExportBtn = document.getElementById('settingsExportBtn');
+    const exportFilterModal = document.getElementById('exportFilterModal');
+    if (settingsExportBtn && exportFilterModal) {
+        settingsExportBtn.addEventListener('click', () => {
+            buildExportFilter();
+            exportFilterModal.style.display = 'block';
+        });
+    }
+
+    // 导入按钮 — 触发文件选择
+    const settingsImportBtn = document.getElementById('settingsImportBtn');
+    const fileInput = document.getElementById('importFileInput');
+    if (settingsImportBtn && fileInput) {
+        settingsImportBtn.addEventListener('click', () => {
+            // 先显示导入方式选择
+            const pasteModal = document.getElementById('pasteModal');
+            if (pasteModal) {
+                document.getElementById('importSelectView').style.display = 'block';
+                document.getElementById('importPasteView').style.display = 'none';
+                document.getElementById('importSelectActions').style.display = 'block';
+                pasteModal.style.display = 'block';
+            }
         });
     }
 }

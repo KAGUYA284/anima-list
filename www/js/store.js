@@ -3,17 +3,32 @@
 // ============================================================
 
 /** 全局应用状态 */
+const DEFAULT_SETTINGS = {
+    listStyle: 'text', // 'text' | 'cover'
+    darkMode: false,
+    apiEndpoint: 'direct' // 'direct' | 'proxy1'
+};
+
 let state = {
     animeList: loadFromStorage(),
     filter: 'all',
     searchQuery: '',
     currentPage: 'list',
-    currentAnime: null
+    currentAnime: null,
+    settings: { ...DEFAULT_SETTINGS, ...loadSettings() }
 };
 
 /** 更新状态并触发重新渲染 */
 function setState(updates) {
     state = { ...state, ...updates };
+    render();
+}
+
+/** 更新设置（自动持久化 + 重新渲染） */
+function updateSettings(updates) {
+    const newSettings = { ...state.settings, ...updates };
+    saveSettings(newSettings);
+    state.settings = newSettings;
     render();
 }
 
