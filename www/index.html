@@ -93,6 +93,60 @@
         </div>
     </div>
 
-    <script type="module" src="js/app.js"></script>
+    <script>
+        (() => {
+            const splash = document.getElementById('splashScreen');
+            const app = document.getElementById('app');
+            let finished = false;
+
+            function dismissSplash(delay = 0) {
+                window.setTimeout(() => {
+                    if (!splash?.isConnected) return;
+                    splash.style.opacity = '0';
+                    window.setTimeout(() => splash.remove(), 400);
+                }, delay);
+            }
+
+            function showStartupError() {
+                if (finished) return;
+                finished = true;
+                window.clearTimeout(fallbackTimer);
+                dismissSplash();
+                if (!app || app.childElementCount > 0) return;
+
+                const main = document.createElement('main');
+                main.className = 'main-content';
+                main.style.cssText = 'text-align:center;padding-top:4rem;';
+
+                const title = document.createElement('h1');
+                title.style.fontSize = '1.25rem';
+                title.textContent = '应用启动失败';
+
+                const message = document.createElement('p');
+                message.style.color = '#6b7280';
+                message.textContent = location.protocol === 'file:'
+                    ? '请通过 npm run dev 或 npm run preview 启动网页，不要直接双击 HTML 文件。'
+                    : '应用脚本未能加载，请刷新页面或检查静态资源是否完整。';
+
+                const retry = document.createElement('button');
+                retry.className = 'btn btn-primary';
+                retry.textContent = '重新加载';
+                retry.addEventListener('click', () => location.reload());
+
+                main.append(title, message, retry);
+                app.replaceChildren(main);
+            }
+
+            const fallbackTimer = window.setTimeout(showStartupError, 5000);
+            window.__animeTrackerReady = () => {
+                if (finished) return;
+                finished = true;
+                window.clearTimeout(fallbackTimer);
+                dismissSplash(800);
+            };
+            window.__animeTrackerStartupFailed = showStartupError;
+        })();
+    </script>
+    <script type="module" src="js/app.js" onerror="window.__animeTrackerStartupFailed?.()"></script>
 </body>
 </html>

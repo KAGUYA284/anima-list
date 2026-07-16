@@ -1,4 +1,5 @@
 import { state } from './store.js';
+import { safeImageUrl } from './utils.js';
 
 const API_PROXIES = {
     direct: 'https://api.bgm.tv',
@@ -8,9 +9,11 @@ const API_PROXIES = {
 const responseCache = new Map();
 const inFlight = new Map();
 const DEFAULT_TIMEOUT_MS = 10000;
-const CACHE_STORAGE_KEY = 'anime-tracker-api-cache-v1';
+// v2 invalidates responses produced by the old proxy, which could split UTF-8 characters across chunks.
+const CACHE_STORAGE_KEY = 'anime-tracker-api-cache-v2';
 const MAX_PERSISTED_CACHE_ENTRIES = 100;
 const STALE_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
+const proxyImageCache = new Map();
 
 function readPersistedCache() {
     try {
@@ -50,6 +53,71 @@ export function getApiBaseUrl() {
     return API_PROXIES[state.settings.apiEndpoint] || API_PROXIES.direct;
 }
 
+/** 代理模式下让 Bangumi 图片也经过同一代理，避免移动网络只能访问 API 文本而无法访问图片 CDN。 */
+export function getBangumiImageUrl(value, endpoint = state.settings.apiEndpoint) {
+    const directUrl = safeImageUrl(value);
+    if (!directUrl || endpoint !== 'proxy1') return directUrl;
+
+    const parsed = new URL(directUrl);
+    if (parsed.hostname !== 'lain.bgm.tv') return directUrl;
+    return `${API_PROXIES.proxy1}/image?url=${encodeURIComponent(directUrl)}`;
+}
+
+function imageContentType(headers) {
+    const matches = String(headers.get('content-type') || '').match(/image\/(?:jpeg|png|webp|gif)/gi);
+    return matches?.at(-1)?.toLowerCase() || 'image/jpeg';
+}
+
+/** Convert both native binary and SCF gateway Base64 responses into a browser image URL. */
+export async function resolveBangumiImageUrl(value, endpoint = state.settings.apiEndpoint) {
+    const directUrl = safeImageUrl(value);
+    const proxyUrl = getBangumiImageUrl(directUrl, endpoint);
+    if (!directUrl || proxyUrl === directUrl) return directUrl;
+    if (proxyImageCache.has(proxyUrl)) return proxyImageCache.get(proxyUrl);
+
+    const pending = (async () => {
+        const response = await fetchWithTimeout(proxyUrl, { cache: 'force-cache' });
+        if (!response.ok) throw new Error(`Image proxy returned ${response.status}`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        let blobBytes = bytes;
+        const isKnownBinary = (bytes[0] === 0xff && bytes[1] === 0xd8)
+            || (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
+            || (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46)
+            || (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46);
+        if (!isKnownBinary) {
+            const base64 = new TextDecoder('ascii').decode(bytes).trim();
+            if (!base64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+                throw new Error('Image proxy returned an unsupported payload');
+            }
+            const decoded = atob(base64);
+            blobBytes = Uint8Array.from(decoded, char => char.charCodeAt(0));
+        }
+        return URL.createObjectURL(new Blob([blobBytes], { type: imageContentType(response.headers) }));
+    })().catch(error => {
+        proxyImageCache.delete(proxyUrl);
+        throw error;
+    });
+    proxyImageCache.set(proxyUrl, pending);
+    return pending;
+}
+
+/** Resolve proxy-backed images below a freshly rendered element. */
+export function hydrateBangumiImages(root = document) {
+    if (state.settings.apiEndpoint !== 'proxy1') return;
+    root.querySelectorAll('img[data-direct-src]').forEach(image => {
+        if (image.dataset.proxyLoading === 'true') return;
+        const directUrl = safeImageUrl(image.dataset.directSrc);
+        if (!directUrl || getBangumiImageUrl(directUrl) === directUrl) return;
+        image.dataset.proxyLoading = 'true';
+        resolveBangumiImageUrl(directUrl)
+            .then(url => {
+                if (image.isConnected) image.src = url;
+            })
+            .catch(error => console.warn('[Image proxy] Unable to decode image', error))
+            .finally(() => { delete image.dataset.proxyLoading; });
+    });
+}
+
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -84,12 +152,20 @@ function unwrapProxyResponse(data) {
     return data;
 }
 
+function hasBrokenEncoding(value) {
+    try {
+        return JSON.stringify(value).includes('\uFFFD');
+    } catch {
+        return false;
+    }
+}
+
 export async function apiFetch(url, options = {}, { retries = 2, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     let lastError;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
         try {
             const response = await fetchWithTimeout(url, options, timeoutMs);
-            const text = await response.text();
+            const text = new TextDecoder('utf-8').decode(await response.arrayBuffer());
             if (!response.ok) {
                 const retryable = [429, 502, 503, 504].includes(response.status);
                 if (retryable && attempt < retries) {
@@ -110,6 +186,20 @@ export async function apiFetch(url, options = {}, { retries = 2, timeoutMs = DEF
         }
     }
     throw lastError || new Error('Bangumi API 请求失败');
+}
+
+async function apiFetchWithEncodingFallback(path, options = {}) {
+    const primaryBase = getApiBaseUrl();
+    const primary = await apiFetch(`${primaryBase}${path}`, options);
+    if (primaryBase === API_PROXIES.direct || !hasBrokenEncoding(primary)) return primary;
+
+    try {
+        const directOptions = { ...options };
+        delete directOptions.signal;
+        return await apiFetch(`${API_PROXIES.direct}${path}`, directOptions, { retries: 0 });
+    } catch {
+        throw new Error('代理返回了损坏的 UTF-8 文本，请更新代理后重试');
+    }
 }
 
 async function cachedRequest(key, loader, ttlMs) {
@@ -140,8 +230,7 @@ async function cachedRequest(key, loader, ttlMs) {
 export async function searchBangumi(keyword, { signal } = {}) {
     const normalized = String(keyword || '').trim();
     if (!normalized) return [];
-    const url = `${getApiBaseUrl()}/v0/search/subjects`;
-    const data = await apiFetch(url, {
+    const data = await apiFetchWithEncodingFallback('/v0/search/subjects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword: normalized, filter: { type: [2] }, limit: 8 }),
@@ -154,7 +243,7 @@ export async function searchBangumi(keyword, { signal } = {}) {
 export function getBangumiSubject(id) {
     const key = `${getApiBaseUrl()}:subject:${id}`;
     return cachedRequest(key, async () => {
-        const data = await apiFetch(`${getApiBaseUrl()}/v0/subjects/${encodeURIComponent(id)}`);
+        const data = await apiFetchWithEncodingFallback(`/v0/subjects/${encodeURIComponent(id)}`);
         return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
     }, 6 * 60 * 60 * 1000);
 }
@@ -162,7 +251,20 @@ export function getBangumiSubject(id) {
 export function getBangumiCharacters(id) {
     const key = `${getApiBaseUrl()}:characters:${id}`;
     return cachedRequest(key, async () => {
-        const data = await apiFetch(`${getApiBaseUrl()}/v0/subjects/${encodeURIComponent(id)}/characters`);
+        const data = await apiFetchWithEncodingFallback(`/v0/subjects/${encodeURIComponent(id)}/characters`);
         return Array.isArray(data) ? data.filter(item => item && typeof item === 'object') : [];
     }, 6 * 60 * 60 * 1000);
+}
+
+export function getBangumiPersons(id) {
+    const key = `${getApiBaseUrl()}:persons:${id}`;
+    return cachedRequest(key, async () => {
+        const data = await apiFetchWithEncodingFallback(`/v0/subjects/${encodeURIComponent(id)}/persons`);
+        return Array.isArray(data) ? data.filter(item => item && typeof item === 'object') : [];
+    }, 6 * 60 * 60 * 1000);
+}
+
+export function getCachedBangumiSubject(id) {
+    const key = `${getApiBaseUrl()}:subject:${id}`;
+    return getCacheEntry(key)?.value || null;
 }

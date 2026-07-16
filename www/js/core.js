@@ -41,3 +41,20 @@ export function getReminderItems(animeList, todayWeekday) {
         binge: animeList.filter(a => a.status === 'watching' && a.type === 'binge'),
     };
 }
+
+function infoboxText(value) {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.map(item => infoboxText(item)).filter(Boolean).join('、');
+    if (value && typeof value === 'object') return infoboxText(value.v ?? value.name ?? '');
+    return '';
+}
+
+export function extractAnimationStudio(persons = [], infobox = []) {
+    const relations = new Set(['动画制作', '動畫製作', 'アニメーション制作']);
+    const relatedStudio = persons.find(person => relations.has(String(person?.relation || '').trim()));
+    if (relatedStudio?.name) return String(relatedStudio.name).trim();
+
+    const keys = new Set(['动画制作', '動畫製作', 'アニメーション制作', '制作公司', '製作公司', 'Studio']);
+    const item = infobox.find(entry => keys.has(String(entry?.key || '').trim()));
+    return infoboxText(item?.value).trim();
+}

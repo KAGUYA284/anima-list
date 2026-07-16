@@ -7,7 +7,42 @@ globalThis.localStorage = {
     setItem: (key, value) => storage.set(key, value),
 };
 
-const { apiFetch, getBangumiSubject } = await import('../www/js/api.js');
+const { apiFetch, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl } = await import('../www/js/api.js');
+
+test('Bangumi images use the image proxy only in proxy mode', () => {
+    const image = 'https://lain.bgm.tv/r/800/pic/cover/l/example.jpg';
+    assert.equal(getBangumiImageUrl(image, 'direct'), image);
+    assert.equal(
+        getBangumiImageUrl(image, 'proxy1'),
+        `https://1449216768-89tlli7yzj.ap-hongkong.tencentscf.com/image?url=${encodeURIComponent(image)}`,
+    );
+    assert.equal(getBangumiImageUrl('https://example.test/image.jpg', 'proxy1'), 'https://example.test/image.jpg');
+    assert.equal(getBangumiImageUrl('javascript:alert(1)', 'proxy1'), '');
+});
+
+test('SCF Base64 image responses are decoded into Blob URLs', async () => {
+    const originalCreateObjectURL = URL.createObjectURL;
+    let capturedBlob;
+    URL.createObjectURL = blob => {
+        capturedBlob = blob;
+        return 'blob:test-image';
+    };
+    globalThis.fetch = async () => new Response('aGVsbG8=', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json,image/jpeg' },
+    });
+    try {
+        const result = await resolveBangumiImageUrl(
+            'https://lain.bgm.tv/r/800/pic/cover/l/proxy-base64-test.jpg',
+            'proxy1',
+        );
+        assert.equal(result, 'blob:test-image');
+        assert.equal(capturedBlob.type, 'image/jpeg');
+        assert.equal(await capturedBlob.text(), 'hello');
+    } finally {
+        URL.createObjectURL = originalCreateObjectURL;
+    }
+});
 
 test('apiFetch retries a transient response and parses the successful response', async () => {
     let calls = 0;
@@ -30,7 +65,7 @@ test('subject metadata is persisted and used as an offline stale fallback', asyn
     try {
         const first = await getBangumiSubject('7');
         assert.equal(first.name, 'cached');
-        assert.ok(storage.get('anime-tracker-api-cache-v1'));
+        assert.ok(storage.get('anime-tracker-api-cache-v2'));
 
         now += 7 * 60 * 60 * 1000;
         globalThis.fetch = async () => { throw new TypeError('offline'); };

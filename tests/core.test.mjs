@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changeProgress, classifySeason, deriveStatus, getReminderItems } from '../www/js/core.js';
+import { changeProgress, classifySeason, deriveStatus, extractAnimationStudio, getReminderItems } from '../www/js/core.js';
 
 test('deriveStatus follows progress boundaries', () => {
     assert.equal(deriveStatus(0, 12, 'watching'), 'want');
@@ -37,4 +37,17 @@ test('getReminderItems separates today chasing and active binge records', () => 
     const result = getReminderItems(list, 4);
     assert.equal(result.today.length, 1);
     assert.equal(result.binge.length, 1);
+});
+
+test('extractAnimationStudio prefers the animation studio relation and never uses the original author', () => {
+    const persons = [
+        { name: '理不尽な孫の手', relation: '原作' },
+        { name: 'スタジオバインド', relation: '动画制作' },
+    ];
+    assert.equal(extractAnimationStudio(persons, []), 'スタジオバインド');
+    assert.equal(extractAnimationStudio([], [
+        { key: '原作', value: '理不尽な孫の手' },
+        { key: '动画制作', value: [{ v: 'Studio Bind' }] },
+    ]), 'Studio Bind');
+    assert.equal(extractAnimationStudio([], [{ key: '原作', value: '理不尽な孫の手' }]), '');
 });

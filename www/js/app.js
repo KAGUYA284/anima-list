@@ -23,14 +23,7 @@ function safeRender() {
 
 setRenderer(safeRender);
 safeRender();
-
-const splash = document.getElementById('splashScreen');
-if (splash) {
-    setTimeout(() => {
-        splash.style.opacity = '0';
-        setTimeout(() => splash.remove(), 400);
-    }, 800);
-}
+window.__animeTrackerReady?.();
 
 setTimeout(() => {
     try {

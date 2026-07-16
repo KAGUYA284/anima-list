@@ -4,7 +4,7 @@ const https = require('https');
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const TIMEOUT_MS = 10000;
-const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS || 'https://localhost,http://localhost:5173')
+const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS || 'https://localhost,http://localhost:5173,http://127.0.0.1:5173')
     .split(',')
     .map(value => value.trim())
     .filter(Boolean));
@@ -25,10 +25,81 @@ function response(statusCode, body = '', extraHeaders = {}, origin = '') {
     };
 }
 
+function binaryResponse(statusCode, body, contentType, origin = '') {
+    return {
+        isBase64Encoded: true,
+        statusCode,
+        headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=604800, immutable',
+            'X-Content-Type-Options': 'nosniff',
+            ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
+        },
+        body: body.toString('base64'),
+    };
+}
+
+function getAllowedImageUrl(event) {
+    const value = event.queryString?.url ?? event.queryStringParameters?.url;
+    if (typeof value !== 'string' || value.length > 2000) return null;
+    try {
+        const url = new URL(value);
+        if (url.protocol !== 'https:' || url.hostname !== 'lain.bgm.tv') return null;
+        if (!/^\/(?:r\/\d+\/)?pic\//.test(url.pathname)) return null;
+        return url;
+    } catch {
+        return null;
+    }
+}
+
+exports._test = { getAllowedImageUrl, isAllowedRequest };
+
+function proxyImage(url, origin) {
+    return new Promise(resolve => {
+        let settled = false;
+        const finish = value => {
+            if (!settled) {
+                settled = true;
+                resolve(value);
+            }
+        };
+        const request = https.request({
+            hostname: url.hostname,
+            port: 443,
+            path: `${url.pathname}${url.search}`,
+            method: 'GET',
+            headers: { 'User-Agent': 'AnimeTracker/1.1.0' },
+        }, upstream => {
+            const contentType = String(upstream.headers['content-type'] || '').split(';')[0];
+            if (upstream.statusCode !== 200 || !/^image\/(?:jpeg|png|webp|gif)$/.test(contentType)) {
+                upstream.resume();
+                finish(response(upstream.statusCode || 502, { error: 'Image upstream failed' }, {}, origin));
+                return;
+            }
+
+            const chunks = [];
+            let size = 0;
+            upstream.on('data', chunk => {
+                size += chunk.length;
+                if (size > MAX_RESPONSE_BYTES) {
+                    request.destroy(new Error('Image response too large'));
+                    return;
+                }
+                chunks.push(chunk);
+            });
+            upstream.on('end', () => finish(binaryResponse(200, Buffer.concat(chunks), contentType, origin)));
+        });
+        request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error('Image upstream timeout')));
+        request.on('error', error => finish(response(502, { error: error.message }, {}, origin)));
+        request.end();
+    });
+}
+
 function isAllowedRequest(method, path) {
     if (method === 'POST' && path === '/v0/search/subjects') return true;
     if (method === 'GET' && /^\/v0\/subjects\/\d+$/.test(path)) return true;
     if (method === 'GET' && /^\/v0\/subjects\/\d+\/characters$/.test(path)) return true;
+    if (method === 'GET' && /^\/v0\/subjects\/\d+\/persons$/.test(path)) return true;
     return false;
 }
 
@@ -44,6 +115,11 @@ exports.main_handler = async event => {
         return send(204, '', { 'Access-Control-Max-Age': '86400' });
     }
     if (requestOrigin && !corsOrigin) return send(403, { error: 'Origin not allowed' });
+    if (method === 'GET' && path === '/image') {
+        const imageUrl = getAllowedImageUrl(event);
+        if (!imageUrl) return send(400, { error: 'Invalid image URL' });
+        return proxyImage(imageUrl, corsOrigin);
+    }
     if (!isAllowedRequest(method, path)) return send(404, { error: 'Not found' });
 
     const body = event.body

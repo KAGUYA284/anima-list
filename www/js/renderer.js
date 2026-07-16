@@ -4,7 +4,7 @@
 
 import { APP_VERSION, QUARTER_ORDER, STATUS_CONFIG, TYPE_CONFIG, WEEK_DAYS } from './constants.js';
 import { classifySeason, getReminderItems } from './core.js';
-import { getBangumiSubject } from './api.js';
+import { getBangumiImageUrl, getBangumiSubject, getCachedBangumiSubject, hydrateBangumiImages } from './api.js';
 import { getCurrentAnime, getFilteredAnime, state } from './store.js';
 import { loadCollapsed } from './storage.js';
 import { escHtml, renderEditableStars, renderStars, safeImageUrl } from './utils.js';
@@ -50,6 +50,7 @@ export function render() {
             attachSettingsEvents();
             break;
     }
+    hydrateBangumiImages(app);
 }
 
 /** 渲染列表页 */
@@ -213,6 +214,15 @@ function renderAnimeList(animeList) {
 /** 渲染单个番剧卡片 */
 const coverCache = {};
 
+function getCachedCover(bgmId) {
+    if (!bgmId) return '';
+    if (coverCache[bgmId]) return coverCache[bgmId];
+    const persistedSubject = getCachedBangumiSubject(bgmId);
+    const cover = safeImageUrl(persistedSubject?.images?.medium || '');
+    if (cover) coverCache[bgmId] = cover;
+    return cover;
+}
+
 function renderAnimeCard(anime) {
     const progress = anime.totalEpisodes > 0
         ? (anime.currentEpisode / anime.totalEpisodes) * 100
@@ -221,12 +231,12 @@ function renderAnimeCard(anime) {
     const typeLabel = TYPE_CONFIG[anime.type]?.label || '';
 
     if (state.settings.listStyle === 'cover') {
-        const cachedCover = anime.bgmId ? coverCache[anime.bgmId] : null;
+        const cachedCover = getCachedCover(anime.bgmId);
         return `
             <div class="anime-card anime-card-cover" data-id="${escHtml(anime.id)}" data-bgmid="${escHtml(anime.bgmId || '')}">
                 <div class="card-cover-thumb">
                     ${cachedCover
-                        ? `<img src="${safeImageUrl(cachedCover)}" alt="" class="card-cover-img" loading="lazy">`
+                        ? `<img src="${getBangumiImageUrl(cachedCover)}" data-direct-src="${safeImageUrl(cachedCover)}" onerror="if(this.src!==this.dataset.directSrc){this.src=this.dataset.directSrc}else{this.style.display='none'}" alt="" class="card-cover-img" loading="lazy">`
                         : `<div class="card-cover-placeholder">${escHtml(anime.title.charAt(0))}</div>`
                     }
                     ${!cachedCover && anime.bgmId
@@ -731,7 +741,7 @@ function renderSettingsPage() {
                             直连
                         </button>
                         <button class="toggle-btn ${apiEndpoint === 'proxy1' ? 'active' : ''}" data-api="proxy1">
-                            代理1
+                            代理
                         </button>
                     </div>
                 </div>
@@ -765,26 +775,43 @@ export async function loadListCovers() {
     const lazyImgs = document.querySelectorAll('.card-cover-lazy');
     if (lazyImgs.length === 0) return;
     const bgmIds = [...new Set(Array.from(lazyImgs).map(el => el.dataset.src))];
-    await Promise.all(bgmIds.map(async (bgmId) => {
-        if (coverCache[bgmId]) return;
-        try {
-            const subject = await getBangumiSubject(bgmId);
-            if (subject?.images?.medium) {
-                coverCache[bgmId] = safeImageUrl(subject.images.medium);
-            }
-        } catch (e) {}
-    }));
-    document.querySelectorAll('.card-cover-lazy').forEach(el => {
-        const id = el.dataset.src;
-        if (coverCache[id]) {
-            el.src = coverCache[id];
+
+    function applyCover(bgmId, cover) {
+        document.querySelectorAll('.card-cover-lazy').forEach(el => {
+            if (el.dataset.src !== bgmId) return;
+            const directUrl = safeImageUrl(cover);
+            const primaryUrl = getBangumiImageUrl(cover);
+            let usedFallback = false;
+            el.addEventListener('load', () => {
+                const thumb = el.closest('.card-cover-thumb');
+                const placeholder = thumb?.querySelector('.card-cover-placeholder');
+                if (placeholder) placeholder.style.display = 'none';
+            }, { once: true });
+            el.addEventListener('error', () => {
+                if (!usedFallback && directUrl && primaryUrl !== directUrl) {
+                    usedFallback = true;
+                    el.src = directUrl;
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+            el.src = primaryUrl;
             el.style.display = 'block';
             el.classList.remove('card-cover-lazy');
-            const thumb = el.closest('.card-cover-thumb');
-            if (thumb) {
-                const placeholder = thumb.querySelector('.card-cover-placeholder');
-                if (placeholder) placeholder.style.display = 'none';
-            }
+            hydrateBangumiImages(el.parentElement);
+        });
+    }
+
+    await Promise.allSettled(bgmIds.map(async bgmId => {
+        const cachedCover = getCachedCover(bgmId);
+        if (cachedCover) {
+            applyCover(bgmId, cachedCover);
+            return;
         }
-    });
+        const subject = await getBangumiSubject(bgmId);
+        const cover = safeImageUrl(subject?.images?.medium || '');
+        if (!cover) return;
+        coverCache[bgmId] = cover;
+        applyCover(bgmId, cover);
+    }));
 }

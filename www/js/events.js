@@ -3,9 +3,12 @@
 // ============================================================
 
 import { QUARTER_BOUNDARIES, QUARTER_ORDER, WEEK_DAYS } from './constants.js';
-import { changeProgress, classifySeason, deriveStatus } from './core.js';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { changeProgress, classifySeason, deriveStatus, extractAnimationStudio } from './core.js';
 import { createBackup, readBackup } from './data.js';
-import { getBangumiCharacters, getBangumiSubject, searchBangumi } from './api.js';
+import { getBangumiCharacters, getBangumiImageUrl, getBangumiPersons, getBangumiSubject, hydrateBangumiImages, searchBangumi } from './api.js';
 import {
     addAnime, deleteAnime, getAnimeById, getCurrentAnime, replaceAnimeList,
     setState, state, updateAnime, updateSettings,
@@ -471,24 +474,28 @@ async function doExportFile(selected) {
     }
 
     // 策略2: Capacitor Filesystem + Share (Android/iOS)
-    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Filesystem) {
+    if (Capacitor.isNativePlatform()) {
         try {
-            const result = await Capacitor.Plugins.Filesystem.writeFile({
+            showToast('正在准备 JSON 文件...');
+            const result = await Filesystem.writeFile({
                 path: filename,
                 data: json,
-                directory: 'CACHE'
+                directory: Directory.Cache,
+                encoding: Encoding.UTF8,
+                recursive: true,
             });
-            if (Capacitor.Plugins.Share) {
-                await Capacitor.Plugins.Share.share({
-                    title: 'Anime list',
-                    url: result.uri,
-                    dialogTitle: '导出追番数据'
-                });
-                showToast(`导出成功 — ${selected.length} 部番剧`);
-                return;
-            }
+            await Share.share({
+                title: '追番记录备份',
+                text: `${selected.length} 部番剧的 JSON 备份`,
+                url: result.uri,
+                dialogTitle: '导出追番数据',
+            });
+            showToast(`导出成功 — ${selected.length} 部番剧`);
+            return;
         } catch (e) {
             console.error('[Export] FileSystem export failed:', e);
+            showToast(`导出失败：${e?.message || '无法创建分享文件'}`);
+            return;
         }
     }
 
@@ -611,9 +618,10 @@ async function loadBangumiDetailInto(bgmId) {
     if (!container) return;
     container.innerHTML = '<div class="bgm-loading">加载番剧详情...</div>';
 
-    const [subject, characters] = await Promise.all([
+    const [subject, characters, persons] = await Promise.all([
         getBangumiSubject(bgmId),
-        getBangumiCharacters(bgmId)
+        getBangumiCharacters(bgmId),
+        getBangumiPersons(bgmId),
     ]);
 
     if (!subject) {
@@ -621,23 +629,29 @@ async function loadBangumiDetailInto(bgmId) {
         return;
     }
 
-    // 提取动画制作公司
-    let studio = '';
-    if (subject.infobox) {
-        const studioItem = subject.infobox.find(i => i.key === '动画制作' || i.key === '制作' || i.key === '原作');
-        if (studioItem) {
-            studio = typeof studioItem.value === 'string' ? studioItem.value : (studioItem.value[0] || '');
-        }
+    const studio = extractAnimationStudio(persons, Array.isArray(subject.infobox) ? subject.infobox : []);
+
+    // 修复旧代理曾写入本地记录的 U+FFFD 替换字符标题。
+    const currentAnime = getCurrentAnime();
+    const remoteTitle = String(subject.name_cn || subject.name || '').trim();
+    if (currentAnime?.id && currentAnime.title.includes('\uFFFD') && remoteTitle && !remoteTitle.includes('\uFFFD')) {
+        updateAnime(currentAnime.id, { title: remoteTitle }, { render: false });
+        const titleElement = document.querySelector('.detail-title');
+        if (titleElement) titleElement.textContent = remoteTitle;
     }
 
-    const cover = safeImageUrl(subject.images?.large || '');
+    const rawCover = subject.images?.large || '';
+    const cover = getBangumiImageUrl(rawCover);
+    const coverFallback = safeImageUrl(rawCover);
     const summary = subject.summary || '';
 
     // 角色头像 HTML（带加载失败回退）
     function avatarHtml(c) {
-        var imgUrl = safeImageUrl(c.images?.grid || c.images?.small || c.images?.medium || '');
+        var rawImgUrl = c.images?.grid || c.images?.small || c.images?.medium || '';
+        var imgUrl = getBangumiImageUrl(rawImgUrl);
+        var fallbackUrl = safeImageUrl(rawImgUrl);
         if (imgUrl) {
-            return '<div class="char-avatar-wrap"><img src="' + imgUrl + '" alt="' + escHtml(c.name) + '" class="char-avatar" onerror="var p=this.parentNode;p.classList.add(\'char-avatar-fallback\');this.remove();"></div>';
+            return '<div class="char-avatar-wrap"><img src="' + imgUrl + '" data-direct-src="' + fallbackUrl + '" alt="' + escHtml(c.name) + '" class="char-avatar" onerror="if(this.src!==this.dataset.directSrc){this.src=this.dataset.directSrc;return}var p=this.parentNode;p.classList.add(\'char-avatar-fallback\');this.remove();"></div>';
         }
         return '<div class="char-avatar char-avatar-placeholder"></div>';
     }
@@ -652,7 +666,7 @@ async function loadBangumiDetailInto(bgmId) {
 
     container.innerHTML = `
         <div class="bgm-detail">
-            ${cover ? `<div class="bgm-cover"><img src="${cover}" alt="封面"></div>` : ''}
+            ${cover ? `<div class="bgm-cover"><img src="${cover}" data-direct-src="${coverFallback}" onerror="if(this.src!==this.dataset.directSrc){this.src=this.dataset.directSrc}else{this.style.display='none'}" alt="封面"></div>` : ''}
             <div class="bgm-info">
                 ${summary ? `<p class="bgm-summary">${escHtml(summary)}</p>` : ''}
             </div>
@@ -673,6 +687,7 @@ async function loadBangumiDetailInto(bgmId) {
         ` : ''}
         ${studio ? `<div class="bgm-studio"><span class="info-label">动画制作</span><span>${escHtml(studio)}</span></div>` : ''}
     `;
+    hydrateBangumiImages(container);
 }
 
 /** 显示单集编辑弹窗 */

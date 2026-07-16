@@ -5,10 +5,30 @@
   "author": "",
   "license": "MIT",
   "private": true,
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.animetracker.desktop",
+    "productName": "Anima Tracker",
+    "directories": {
+      "app": ".",
+      "output": ".desktop-build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["dir"]
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "desktop": "npm run build && electron .",
+    "desktop:preview": "npm run build && electron-builder --win dir && node scripts/flatten-desktop-build.mjs",
+    "android:release": "npm run sync && node scripts/create-release-keystore.mjs && cd android && gradlew.bat assembleRelease",
     "lint": "node scripts/check-source.mjs",
     "check:dist": "node scripts/check-dist.mjs",
     "test": "node tests/run-tests.mjs",
@@ -29,6 +49,8 @@
     "@capacitor/share": "^6.0.0"
   },
   "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
     "vite": "^5.1.0"
   }
 }

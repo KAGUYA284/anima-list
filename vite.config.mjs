@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   root: 'www',
+  base: './',
   build: {
     outDir: resolve('dist'),
     emptyOutDir: true,
