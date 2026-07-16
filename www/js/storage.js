@@ -1,56 +1,49 @@
-// ============================================================
-// 数据持久化层 - Anime Tracker
-// ============================================================
+import { COLLAPSE_KEY, SETTINGS_KEY, STORAGE_KEY } from './constants.js';
+import { normalizeStoredRecords } from './data.js';
 
-/** 从 localStorage 加载番剧列表 */
-function loadFromStorage() {
+function readJson(key, fallback) {
     try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch {
-        return [];
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+    } catch (error) {
+        console.error(`[Storage] 读取 ${key} 失败`, error);
+        return fallback;
     }
 }
 
-/** 保存番剧列表到 localStorage */
-function saveToStorage(data) {
+function writeJson(key, value) {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-        console.error('Failed to save:', e);
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+    } catch (error) {
+        console.error(`[Storage] 写入 ${key} 失败`, error);
+        window.dispatchEvent(new CustomEvent('storage-error', { detail: { key, error } }));
+        return false;
     }
 }
 
-/** 加载折叠状态 */
-function loadCollapsed() {
-    try {
-        const data = localStorage.getItem(COLLAPSE_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch {
-        return [];
-    }
+export function loadFromStorage() {
+    return normalizeStoredRecords(readJson(STORAGE_KEY, []));
 }
 
-/** 保存折叠状态 */
-function saveCollapsed(ids) {
-    try {
-        localStorage.setItem(COLLAPSE_KEY, JSON.stringify(ids));
-    } catch (e) {}
+export function saveToStorage(data) {
+    return writeJson(STORAGE_KEY, data);
 }
 
-/** 加载设置 */
-function loadSettings() {
-    try {
-        const data = localStorage.getItem(SETTINGS_KEY);
-        return data ? JSON.parse(data) : {};
-    } catch {
-        return {};
-    }
+export function loadCollapsed() {
+    const value = readJson(COLLAPSE_KEY, []);
+    return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [];
 }
 
-/** 保存设置 */
-function saveSettings(settings) {
-    try {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch (e) {}
+export function saveCollapsed(ids) {
+    return writeJson(COLLAPSE_KEY, ids);
+}
+
+export function loadSettings() {
+    const value = readJson(SETTINGS_KEY, {});
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+export function saveSettings(settings) {
+    return writeJson(SETTINGS_KEY, settings);
 }

@@ -2,8 +2,20 @@
 // 事件处理 - Anime Tracker
 // ============================================================
 
+import { QUARTER_BOUNDARIES, QUARTER_ORDER, WEEK_DAYS } from './constants.js';
+import { changeProgress, classifySeason, deriveStatus } from './core.js';
+import { createBackup, readBackup } from './data.js';
+import { getBangumiCharacters, getBangumiSubject, searchBangumi } from './api.js';
+import {
+    addAnime, deleteAnime, getAnimeById, getCurrentAnime, replaceAnimeList,
+    setState, state, updateAnime, updateSettings,
+} from './store.js';
+import { loadCollapsed, saveCollapsed } from './storage.js';
+import { escHtml, getWeekDayFromDate, safeImageUrl, showToast } from './utils.js';
+import { loadListCovers, updateFormRatingUI, updateFormStatusUI, updateFormTypeUI } from './renderer.js';
+
 /** 绑定列表页事件 */
-function attachListEvents() {
+export function attachListEvents() {
     // 移动端检测
     if (window.Capacitor || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
         document.body.classList.add('is-mobile');
@@ -117,8 +129,7 @@ function attachListEvents() {
     document.querySelectorAll('.anime-card').forEach(card => {
         card.addEventListener('click', () => {
             const id = card.dataset.id;
-            const anime = getAnimeById(id);
-            setState({ currentPage: 'detail', currentAnime: anime });
+            setState({ currentPage: 'detail', currentAnimeId: id });
         });
     });
 
@@ -129,17 +140,7 @@ function attachListEvents() {
             const id = btn.dataset.plus;
             const anime = getAnimeById(id);
             if (!anime) return;
-            let newEpisode = anime.currentEpisode + 1;
-            let newStatus = anime.status;
-            if (newEpisode > anime.totalEpisodes) {
-                newEpisode = anime.totalEpisodes;
-            }
-            if (newEpisode === anime.totalEpisodes && anime.totalEpisodes > 0) {
-                newStatus = 'completed';
-            } else if (newEpisode > 0 && anime.status === 'want') {
-                newStatus = 'watching';
-            }
-            updateAnime(id, { currentEpisode: newEpisode, status: newStatus });
+            updateAnime(id, changeProgress(anime, 1));
         });
     });
 
@@ -164,6 +165,10 @@ function attachListEvents() {
     const exportResultCopyBtn = document.getElementById('exportResultCopyBtn');
 
     let pendingExportData = null; // 暂存筛选后的数据
+
+    // 这些弹窗位于 #app 外，不会随页面重绘销毁，因此只绑定一次。
+    if (!exportFilterModal?.dataset.eventsBound) {
+        if (exportFilterModal) exportFilterModal.dataset.eventsBound = 'true';
 
     // 导出筛选弹窗事件（无条件绑定，元素始终在 HTML 中）
     if (exportFilterModal) {
@@ -303,10 +308,6 @@ function attachListEvents() {
             if (!raw) return;
             try {
                 const imported = JSON.parse(raw);
-                if (!Array.isArray(imported)) {
-                    alert('数据格式错误：需要 JSON 数组');
-                    return;
-                }
                 closePasteModal();
                 doImportJson(imported);
             } catch (e) {
@@ -321,10 +322,6 @@ function attachListEvents() {
             reader.onload = () => {
                 try {
                     const imported = JSON.parse(reader.result);
-                    if (!Array.isArray(imported)) {
-                        alert('文件格式错误');
-                        return;
-                    }
                     doImportJson(imported);
                 } catch (e) {
                     alert('文件解析失败：' + e.message);
@@ -333,6 +330,8 @@ function attachListEvents() {
             reader.readAsText(file);
             fileInput.value = '';
         });
+    }
+
     }
 
     // 封面模式加载番剧封面
@@ -437,7 +436,7 @@ function buildFilteredData(map) {
 
 /** 导出为纯文字 — 在弹窗中展示 JSON */
 function doExportText(selected) {
-    const json = JSON.stringify(selected, null, 2);
+    const json = JSON.stringify(createBackup(selected), null, 2);
     const resultModal = document.getElementById('exportResultModal');
     const resultTextarea = document.getElementById('exportResultTextarea');
     if (resultModal && resultTextarea) {
@@ -450,8 +449,8 @@ function doExportText(selected) {
 
 /** 导出为 JSON 文件 */
 async function doExportFile(selected) {
-    const json = JSON.stringify(selected, null, 2);
-    const filename = 'Anime list.json';
+    const json = JSON.stringify(createBackup(selected), null, 2);
+    const filename = 'anime-tracker-backup.json';
 
     // 策略1: File System Access API (桌面浏览器)
     if (window.showSaveFilePicker) {
@@ -513,28 +512,38 @@ async function doExportFile(selected) {
 
 /** 执行导入合并（以番剧名称为合并键） */
 function doImportJson(imported) {
+    let parsed;
+    try {
+        parsed = readBackup(imported);
+    } catch (error) {
+        alert(error.message);
+        return;
+    }
+    imported = parsed.records;
     const localCount = state.animeList.length;
     const cloudCount = imported.length;
     const merged = new Map();
-    state.animeList.forEach(item => merged.set(item.title, item));
+    const mergeKey = item => item.bgmId
+        ? `bgm:${item.bgmId}`
+        : `title:${item.title.trim().toLocaleLowerCase('zh-CN')}`;
+    state.animeList.forEach(item => merged.set(mergeKey(item), item));
     imported.forEach(item => {
-        merged.set(item.title, item);
+        merged.set(mergeKey(item), item);
     });
     const result = Array.from(merged.values());
-    const msg = `本地：${localCount} 条\n导入数据：${cloudCount} 条\n合并后：${result.length} 条\n\n相同番剧名将被新数据覆盖，确认导入？`;
+    const rejected = parsed.errors.length ? `\n忽略无效记录：${parsed.errors.length} 条` : '';
+    const msg = `本地：${localCount} 条\n导入数据：${cloudCount} 条${rejected}\n合并后：${result.length} 条\n\n相同 Bangumi 条目或标准化名称将被新数据覆盖，确认导入？`;
     if (!confirm(msg)) return;
-    saveToStorage(result);
-    setState({ animeList: result });
-    setTimeout(() => showToast('导入成功'), 100);
+    if (replaceAnimeList(result)) setTimeout(() => showToast('导入成功'), 100);
 }
 
 /** 绑定详情页事件 */
-function attachDetailEvents() {
-    const anime = state.currentAnime;
+export function attachDetailEvents() {
+    const anime = getCurrentAnime();
     if (!anime) return;
 
     document.getElementById('backToList').addEventListener('click', () => {
-        setState({ currentPage: 'list', currentAnime: null });
+        setState({ currentPage: 'list', currentAnimeId: null });
     });
 
     document.getElementById('editAnime').addEventListener('click', () => {
@@ -548,33 +557,11 @@ function attachDetailEvents() {
     });
 
     document.getElementById('progressMinus').addEventListener('click', () => {
-        const newEpisode = Math.max(0, anime.currentEpisode - 1);
-        const updates = { currentEpisode: newEpisode };
-        if (newEpisode === 0) {
-            updates.status = 'want';
-        } else if (anime.status === 'completed' && newEpisode < anime.totalEpisodes) {
-            updates.status = 'watching';
-        }
-        updateAnime(anime.id, updates);
-        setState({ currentAnime: getAnimeById(anime.id) });
+        updateAnime(anime.id, changeProgress(anime, -1));
     });
 
     document.getElementById('progressPlus').addEventListener('click', () => {
-        let newEpisode = anime.currentEpisode + 1;
-        let newStatus = anime.status;
-
-        if (newEpisode > anime.totalEpisodes) {
-            newEpisode = anime.totalEpisodes;
-        }
-
-        if (newEpisode === anime.totalEpisodes && anime.totalEpisodes > 0) {
-            newStatus = 'completed';
-        } else if (newEpisode > 0 && anime.status === 'want') {
-            newStatus = 'watching';
-        }
-
-        updateAnime(anime.id, { currentEpisode: newEpisode, status: newStatus });
-        setState({ currentAnime: getAnimeById(anime.id) });
+        updateAnime(anime.id, changeProgress(anime, 1));
     });
 
     document.querySelectorAll('#detailRating .rating-star').forEach(star => {
@@ -582,14 +569,12 @@ function attachDetailEvents() {
             const rating = parseInt(star.dataset.rating);
             const newRating = anime.rating === rating ? 0 : rating;
             updateAnime(anime.id, { rating: newRating });
-            setState({ currentAnime: getAnimeById(anime.id) });
         });
     });
 
     document.querySelectorAll('[data-status]').forEach(btn => {
         btn.addEventListener('click', () => {
             updateAnime(anime.id, { status: btn.dataset.status });
-            setState({ currentAnime: getAnimeById(anime.id) });
         });
     });
 
@@ -598,7 +583,7 @@ function attachDetailEvents() {
     reviewEl.addEventListener('input', () => {
         clearTimeout(reviewTimeout);
         reviewTimeout = setTimeout(() => {
-            updateAnime(anime.id, { review: reviewEl.value });
+            updateAnime(anime.id, { review: reviewEl.value }, { render: false });
         }, 500);
     });
 
@@ -645,12 +630,12 @@ async function loadBangumiDetailInto(bgmId) {
         }
     }
 
-    const cover = subject.images?.large || '';
+    const cover = safeImageUrl(subject.images?.large || '');
     const summary = subject.summary || '';
 
     // 角色头像 HTML（带加载失败回退）
     function avatarHtml(c) {
-        var imgUrl = c.images?.grid || c.images?.small || c.images?.medium || '';
+        var imgUrl = safeImageUrl(c.images?.grid || c.images?.small || c.images?.medium || '');
         if (imgUrl) {
             return '<div class="char-avatar-wrap"><img src="' + imgUrl + '" alt="' + escHtml(c.name) + '" class="char-avatar" onerror="var p=this.parentNode;p.classList.add(\'char-avatar-fallback\');this.remove();"></div>';
         }
@@ -744,7 +729,6 @@ function showEpisodeEditor(anime, episodeNum) {
             delete currentNotes[episodeNum];
         }
         updateAnime(anime.id, { episodeNotes: currentNotes });
-        setState({ currentAnime: getAnimeById(anime.id) });
         overlay.remove();
     });
 
@@ -755,7 +739,6 @@ function showEpisodeEditor(anime, episodeNum) {
         const currentNotes = { ...(currentAnime.episodeNotes || {}) };
         delete currentNotes[episodeNum];
         updateAnime(anime.id, { episodeNotes: currentNotes });
-        setState({ currentAnime: getAnimeById(anime.id) });
         overlay.remove();
     });
 
@@ -766,7 +749,7 @@ function showEpisodeEditor(anime, episodeNum) {
 }
 
 /** 绑定表单页事件 */
-function attachFormEvents(anime) {
+export function attachFormEvents(anime) {
     const isEdit = !!anime;
     let formData = {
         status: anime?.status || 'watching',
@@ -777,7 +760,7 @@ function attachFormEvents(anime) {
     let selectedBgmId = anime?.bgmId || '';
 
     document.getElementById('backToList').addEventListener('click', () => {
-        setState({ currentPage: 'list', currentAnime: null });
+        setState({ currentPage: 'list', currentAnimeId: null });
     });
 
     // ======== 集数滚轮 ========
@@ -950,12 +933,7 @@ function attachFormEvents(anime) {
             completedDate = document.getElementById('formCompletedDate')?.value || '';
         }
 
-        let status = formData.status;
-        if (currentEpisode === 0) {
-            status = 'want';
-        } else if (currentEpisode >= totalEpisodes && totalEpisodes > 0) {
-            status = 'completed';
-        }
+        const status = deriveStatus(currentEpisode, totalEpisodes, formData.status);
 
         const data = {
             title,
@@ -973,10 +951,10 @@ function attachFormEvents(anime) {
         };
 
         if (isEdit) {
-            updateAnime(anime.id, data);
+            updateAnime(anime.id, data, { render: false });
             setState({
                 currentPage: 'list',
-                currentAnime: null
+                currentAnimeId: null
             });
         } else {
             addAnime(data);
@@ -989,6 +967,7 @@ function attachFormEvents(anime) {
     if (bgmResults && formTitle) {
         let debounceTimer;
         let lastKeyword = '';
+        let searchController;
 
         const doSearch = async (keyword) => {
             if (!keyword) {
@@ -997,14 +976,17 @@ function attachFormEvents(anime) {
             }
             if (keyword === lastKeyword) return;
             lastKeyword = keyword;
+            searchController?.abort();
+            searchController = new AbortController();
 
             bgmResults.style.display = 'block';
             bgmResults.innerHTML = '<div class="bgm-loading">搜索中...</div>';
 
             let subjects = [];
             try {
-                subjects = await searchBangumi(keyword);
+                subjects = await searchBangumi(keyword, { signal: searchController.signal });
             } catch (e) {
+                if (e.name === 'AbortError') return;
                 bgmResults.innerHTML = '<div class="bgm-loading" style="color:#f87171;">搜索失败，请重试</div>';
                 return;
             }
@@ -1018,12 +1000,12 @@ function attachFormEvents(anime) {
                 const cn = item.name_cn && item.name_cn !== item.name ? item.name_cn : '';
                 const date = item.date || '';
                 return `
-                    <div class="bgm-result-item" data-bgm-id="${item.id}">
+                    <div class="bgm-result-item" data-bgm-id="${escHtml(item.id)}">
                         <div>
                             <span class="bgm-result-name">${escHtml(item.name)}</span>
                             ${cn ? `<span class="bgm-result-cn">${escHtml(cn)}</span>` : ''}
                         </div>
-                        <span class="bgm-result-meta">${date}</span>
+                        <span class="bgm-result-meta">${escHtml(date)}</span>
                     </div>
                 `;
             }).join('');
@@ -1095,7 +1077,7 @@ function attachFormEvents(anime) {
 }
 
 /** 绑定设置页事件 */
-function attachSettingsEvents() {
+export function attachSettingsEvents() {
     // 返回按钮
     document.getElementById('backFromSettings').addEventListener('click', () => {
         setState({ currentPage: 'list' });

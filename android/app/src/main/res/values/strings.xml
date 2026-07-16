@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Anime list</string>
-    <string name="title_activity_main">Anime list</string>
+    <string name="app_name">追番记录</string>
+    <string name="title_activity_main">追番记录</string>
     <string name="package_name">com.animetracker.app</string>
     <string name="custom_url_scheme">com.animetracker.app</string>
 </resources>

@@ -3,19 +3,23 @@
 // ============================================================
 
 /** HTML 转义，防止 XSS */
-function escHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
+export function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    })[character]);
 }
 
 /** 生成唯一 ID */
-function generateId() {
+export function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
 /** 从日期字符串获取星期几（1=周一 ... 7=周日，空=空字符串） */
-function getWeekDayFromDate(dateStr) {
+export function getWeekDayFromDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T00:00:00');
     const day = d.getDay();
@@ -23,7 +27,7 @@ function getWeekDayFromDate(dateStr) {
 }
 
 /** 渲染只读星级评分 1-5 */
-function renderStars(rating) {
+export function renderStars(rating) {
     let stars = '';
     for (let i = 1; i <= 5; i++) {
         const filled = i <= rating;
@@ -33,7 +37,7 @@ function renderStars(rating) {
 }
 
 /** 渲染可编辑星级评分 1-5 */
-function renderEditableStars(rating) {
+export function renderEditableStars(rating) {
     let stars = '';
     for (let i = 1; i <= 5; i++) {
         const filled = i <= rating;
@@ -43,10 +47,20 @@ function renderEditableStars(rating) {
 }
 
 /** 显示 Toast 提示消息 */
-function showToast(msg) {
+export function showToast(msg) {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 2000);
+}
+
+/** 只允许远程图片使用 HTTPS，阻止 javascript:、data: 等危险协议。 */
+export function safeImageUrl(value) {
+    try {
+        const url = new URL(String(value || ''));
+        return url.protocol === 'https:' ? url.href : '';
+    } catch {
+        return '';
+    }
 }

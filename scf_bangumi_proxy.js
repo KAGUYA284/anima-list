@@ -1,106 +1,99 @@
-/**
- * Tencent Cloud SCF - Bangumi API Proxy
- * 
- * 部署方式：
- * 1. 登录腾讯云控制台 → 云函数（SCF）
- * 2. 创建新函数，运行环境选 Node.js 16+
- * 3. 将本文件内容粘贴到 index.js
- * 4. 创建 API 网关触发器，启用 CORS
- * 5. 获取触发 URL，配置到前端 API_PROXIES
- */
-
+/** Tencent Cloud SCF proxy for the small Bangumi API surface used by the app. */
 const https = require('https');
 
-exports.main_handler = async (event, context) => {
-    // 1. 获取请求路径（如 /v0/subjects/123 或 /v0/search/subjects）
-    const path = event.path || '/v0/search/subjects';
-    
-    // 2. 获取 HTTP 方法
+const MAX_BODY_BYTES = 32 * 1024;
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const TIMEOUT_MS = 10000;
+const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS || 'https://localhost,http://localhost:5173')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean));
+
+function response(statusCode, body = '', extraHeaders = {}, origin = '') {
+    return {
+        isBase64Encoded: false,
+        statusCode,
+        headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Cache-Control': 'no-store',
+            ...extraHeaders,
+        },
+        body: typeof body === 'string' ? body : JSON.stringify(body),
+    };
+}
+
+function isAllowedRequest(method, path) {
+    if (method === 'POST' && path === '/v0/search/subjects') return true;
+    if (method === 'GET' && /^\/v0\/subjects\/\d+$/.test(path)) return true;
+    if (method === 'GET' && /^\/v0\/subjects\/\d+\/characters$/.test(path)) return true;
+    return false;
+}
+
+exports.main_handler = async event => {
+    const path = event.path || '';
     const method = (event.httpMethod || 'GET').toUpperCase();
+    const requestOrigin = event.headers?.origin || event.headers?.Origin || '';
+    const corsOrigin = allowedOrigins.has(requestOrigin) ? requestOrigin : '';
+    const send = (statusCode, body = '', headers = {}) => response(statusCode, body, headers, corsOrigin);
 
-    // 3. 处理浏览器 CORS 预检请求
     if (method === 'OPTIONS') {
-        return {
-            isBase64Encoded: false,
-            statusCode: 204,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-                'Access-Control-Max-Age': '86400'
-            }
-        };
+        if (!corsOrigin) return send(403, { error: 'Origin not allowed' });
+        return send(204, '', { 'Access-Control-Max-Age': '86400' });
     }
+    if (requestOrigin && !corsOrigin) return send(403, { error: 'Origin not allowed' });
+    if (!isAllowedRequest(method, path)) return send(404, { error: 'Not found' });
 
-    // 4. 构建查询字符串（event.queryString 是 API 网关解析后的对象）
-    const queryString = event.queryString
-        ? Object.keys(event.queryString)
-            .map(key => `${key}=${encodeURIComponent(event.queryString[key])}`)
-            .join('&')
+    const body = event.body
+        ? (typeof event.body === 'string' ? event.body : JSON.stringify(event.body))
         : '';
+    if (Buffer.byteLength(body) > MAX_BODY_BYTES) return send(413, { error: 'Request body too large' });
 
-    // 5. 拼接 Bangumi 官方 API 地址
-    const targetUrl = `https://api.bgm.tv${path}${queryString ? '?' + queryString : ''}`;
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(event.queryString || {})) {
+        if (typeof value === 'string' && value.length <= 500) query.set(key, value);
+    }
+    const targetPath = `${path}${query.size ? `?${query}` : ''}`;
 
-    return new Promise((resolve) => {
-        const urlObj = new URL(targetUrl);
-
-        const options = {
-            hostname: urlObj.hostname,
-            port: 443,
-            path: urlObj.pathname + urlObj.search,
-            method: method,
-            headers: {
-                'User-Agent': 'AnimeTracker/1.0'
+    return new Promise(resolve => {
+        let settled = false;
+        const finish = value => {
+            if (!settled) {
+                settled = true;
+                resolve(value);
             }
         };
-
-        // POST 请求需要转发 Content-Type 和 body
-        if (method === 'POST') {
-            options.headers['Content-Type'] = 'application/json';
-            if (event.body) {
-                options.headers['Content-Length'] = Buffer.byteLength(
-                    typeof event.body === 'string' ? event.body : JSON.stringify(event.body)
-                );
-            }
-        }
-
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => { data += chunk; });
-            res.on('end', () => {
-                resolve({
-                    isBase64Encoded: false,
-                    statusCode: res.statusCode,
-                    headers: {
-                        'Content-Type': 'application/json; charset=utf-8',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type'
-                    },
-                    body: data
-                });
+        const request = https.request({
+            hostname: 'api.bgm.tv',
+            port: 443,
+            path: targetPath,
+            method,
+            headers: {
+                'User-Agent': 'AnimeTracker/1.1.0',
+                ...(method === 'POST' ? {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(body),
+                } : {}),
+            },
+        }, upstream => {
+            const chunks = [];
+            let size = 0;
+            upstream.on('data', chunk => {
+                size += chunk.length;
+                if (size > MAX_RESPONSE_BYTES) {
+                    request.destroy(new Error('Upstream response too large'));
+                    return;
+                }
+                chunks.push(chunk);
             });
+            upstream.on('end', () => finish(send(upstream.statusCode || 502, Buffer.concat(chunks).toString('utf8'))));
         });
 
-        req.on('error', (err) => {
-            resolve({
-                isBase64Encoded: false,
-                statusCode: 502,
-                headers: {
-                    'Content-Type': 'application/json; charset=utf-8',
-                    'Access-Control-Allow-Origin': '*'
-                },
-                body: JSON.stringify({ error: err.message })
-            });
-        });
-
-        // POST 请求向后转发 body
-        if (method === 'POST' && event.body) {
-            const bodyStr = typeof event.body === 'string' ? event.body : JSON.stringify(event.body);
-            req.write(bodyStr);
-        }
-
-        req.end();
+        request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error('Upstream timeout')));
+        request.on('error', error => finish(send(502, { error: error.message })));
+        if (method === 'POST') request.write(body);
+        request.end();
     });
 };

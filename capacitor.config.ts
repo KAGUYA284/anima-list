@@ -3,13 +3,13 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.animetracker.app',
   appName: '追番记录',
-  webDir: 'www',
+  webDir: 'dist',
   server: {
     androidScheme: 'https'
   },
   android: {
     backgroundColor: '#f8f9fb',
-    allowMixedContent: true
+    allowMixedContent: false
   },
   ios: {
     contentInset: 'automatic',

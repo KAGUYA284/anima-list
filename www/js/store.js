@@ -1,85 +1,87 @@
-// ============================================================
-// 状态管理 - Anime Tracker
-// ============================================================
+import { normalizeAnimeRecord } from './data.js';
+import { loadFromStorage, loadSettings, saveSettings, saveToStorage } from './storage.js';
+import { generateId } from './utils.js';
 
-/** 全局应用状态 */
-const DEFAULT_SETTINGS = {
-    listStyle: 'text', // 'text' | 'cover'
+export const DEFAULT_SETTINGS = {
+    listStyle: 'text',
     darkMode: false,
-    apiEndpoint: 'direct' // 'direct' | 'proxy1'
+    apiEndpoint: 'direct',
 };
 
-let state = {
+let renderCallback = () => {};
+
+export let state = {
     animeList: loadFromStorage(),
     filter: 'all',
     searchQuery: '',
     currentPage: 'list',
-    currentAnime: null,
-    settings: { ...DEFAULT_SETTINGS, ...loadSettings() }
+    currentAnimeId: null,
+    settings: { ...DEFAULT_SETTINGS, ...loadSettings() },
 };
 
-/** 更新状态并触发重新渲染 */
-function setState(updates) {
+export function setRenderer(callback) {
+    renderCallback = callback;
+}
+
+export function setState(updates, { render = true } = {}) {
     state = { ...state, ...updates };
-    render();
+    if (render) renderCallback();
 }
 
-/** 更新设置（自动持久化 + 重新渲染） */
-function updateSettings(updates) {
-    const newSettings = { ...state.settings, ...updates };
-    saveSettings(newSettings);
-    state.settings = newSettings;
-    render();
+export function updateSettings(updates) {
+    const settings = { ...state.settings, ...updates };
+    saveSettings(settings);
+    setState({ settings });
 }
 
-/** 获取按筛选条件和搜索查询过滤后的番剧列表 */
-function getFilteredAnime() {
+export function getFilteredAnime() {
     let list = state.animeList;
-    if (state.filter !== 'all') {
-        list = list.filter(anime => anime.status === state.filter);
-    }
+    if (state.filter !== 'all') list = list.filter(anime => anime.status === state.filter);
     if (state.searchQuery) {
-        const q = state.searchQuery.toLowerCase();
-        list = list.filter(anime => anime.title.toLowerCase().includes(q));
+        const query = state.searchQuery.toLocaleLowerCase('zh-CN');
+        list = list.filter(anime => anime.title.toLocaleLowerCase('zh-CN').includes(query));
     }
     return list;
 }
 
-/** 根据 ID 获取单部番剧 */
-function getAnimeById(id) {
-    return state.animeList.find(a => a.id === id);
+export function getAnimeById(id) {
+    return state.animeList.find(anime => anime.id === id) || null;
 }
 
-/** 添加新番剧 */
-function addAnime(animeData) {
-    const newAnime = {
-        ...animeData,
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-    };
-    const newList = [...state.animeList, newAnime];
-    saveToStorage(newList);
-    setState({ animeList: newList, currentPage: 'list' });
+export function getCurrentAnime() {
+    return getAnimeById(state.currentAnimeId);
 }
 
-/** 更新番剧信息（部分更新） */
-function updateAnime(id, updates) {
-    const newList = state.animeList.map(anime =>
-        anime.id === id
-            ? { ...anime, ...updates, updatedAt: new Date().toISOString() }
-            : anime
-    );
-    saveToStorage(newList);
-    setState({ animeList: newList });
+export function addAnime(animeData) {
+    const now = new Date().toISOString();
+    const anime = normalizeAnimeRecord({ ...animeData, id: generateId(), createdAt: now, updatedAt: now });
+    const animeList = [...state.animeList, anime];
+    if (!saveToStorage(animeList)) return false;
+    setState({ animeList, currentPage: 'list', currentAnimeId: null });
+    return true;
 }
 
-/** 删除番剧 */
-function deleteAnime(id) {
-    const newList = state.animeList.filter(a => a.id !== id);
-    saveToStorage(newList);
-    setState({
-        animeList: newList,
-        currentPage: 'list'
+export function updateAnime(id, updates, { render = true } = {}) {
+    let changed = false;
+    const animeList = state.animeList.map(anime => {
+        if (anime.id !== id) return anime;
+        changed = true;
+        return normalizeAnimeRecord({ ...anime, ...updates, id, updatedAt: new Date().toISOString() });
     });
+    if (!changed || !saveToStorage(animeList)) return false;
+    setState({ animeList }, { render });
+    return true;
+}
+
+export function replaceAnimeList(records) {
+    if (!saveToStorage(records)) return false;
+    setState({ animeList: records });
+    return true;
+}
+
+export function deleteAnime(id) {
+    const animeList = state.animeList.filter(anime => anime.id !== id);
+    if (!saveToStorage(animeList)) return false;
+    setState({ animeList, currentPage: 'list', currentAnimeId: null });
+    return true;
 }

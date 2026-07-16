@@ -2,8 +2,16 @@
 // 渲染层 - Anime Tracker
 // ============================================================
 
+import { APP_VERSION, QUARTER_ORDER, STATUS_CONFIG, TYPE_CONFIG, WEEK_DAYS } from './constants.js';
+import { classifySeason, getReminderItems } from './core.js';
+import { getBangumiSubject } from './api.js';
+import { getCurrentAnime, getFilteredAnime, state } from './store.js';
+import { loadCollapsed } from './storage.js';
+import { escHtml, renderEditableStars, renderStars, safeImageUrl } from './utils.js';
+import { attachDetailEvents, attachFormEvents, attachListEvents, attachSettingsEvents } from './events.js';
+
 /** 主渲染分发器：根据当前页面状态渲染对应视图 */
-function render() {
+export function render() {
     // 应用深色模式
     if (state.settings.darkMode) {
         document.body.classList.add('dark-mode');
@@ -27,8 +35,15 @@ function render() {
             attachFormEvents(null);
             break;
         case 'edit':
-            app.innerHTML = renderFormPage(state.currentAnime);
-            attachFormEvents(state.currentAnime);
+            const anime = getCurrentAnime();
+            if (!anime) {
+                window.location.hash = '';
+                app.innerHTML = renderListPage();
+                attachListEvents();
+                break;
+            }
+            app.innerHTML = renderFormPage(anime);
+            attachFormEvents(anime);
             break;
         case 'settings':
             app.innerHTML = renderSettingsPage();
@@ -71,7 +86,7 @@ function renderListPage() {
                 class="form-input"
                 id="searchInput"
                 placeholder="搜索番剧..."
-                value="${state.searchQuery}"
+                value="${escHtml(state.searchQuery)}"
                 style="width:100%;max-width:800px;margin:0 auto;display:block;padding:0.4375rem 0.75rem;font-size:0.875rem;"
             >
         </div>
@@ -122,50 +137,10 @@ function renderAnimeList(animeList) {
     const groups = {};
 
     animeList.forEach(anime => {
-        let year = '未分类';
-        let quarter = '';
         const groupDate = anime.type === 'binge'
             ? (anime.startDate || anime.airDate || '')
             : (anime.airDate || '');
-        if (groupDate) {
-            const parts = groupDate.split('-');
-            if (parts.length >= 2) {
-                year = parts[0];
-                const month = parseInt(parts[1]);
-                if (anime.type === 'binge') {
-                    if (month >= 1 && month <= 3) quarter = '冬';
-                    else if (month >= 4 && month <= 6) quarter = '春';
-                    else if (month >= 7 && month <= 9) quarter = '夏';
-                    else if (month >= 10 && month <= 12) quarter = '秋';
-                } else if (parts.length >= 3) {
-                    const day = parseInt(parts[2]);
-                    let baseQuarter = '';
-                    for (const [q, info] of Object.entries(QUARTER_BOUNDARIES)) {
-                        if (info.months.includes(month)) {
-                            baseQuarter = q;
-                            break;
-                        }
-                    }
-                    if (baseQuarter) {
-                        const info = QUARTER_BOUNDARIES[baseQuarter];
-                        const lastMonth = info.months[info.months.length - 1];
-                        if (month === lastMonth && day >= info.lastWeekDay) {
-                            quarter = info.next;
-                            if (info.nextYearOffset > 0) {
-                                year = String(parseInt(year) + info.nextYearOffset);
-                            }
-                        } else {
-                            quarter = baseQuarter;
-                        }
-                    }
-                } else {
-                    if (month >= 1 && month <= 3) quarter = '冬';
-                    else if (month >= 4 && month <= 6) quarter = '春';
-                    else if (month >= 7 && month <= 9) quarter = '夏';
-                    else if (month >= 10 && month <= 12) quarter = '秋';
-                }
-            }
-        }
+        const { year, quarter } = classifySeason(groupDate, anime.type);
         if (!groups[year]) groups[year] = {};
         if (!groups[year][quarter]) groups[year][quarter] = [];
         groups[year][quarter].push(anime);
@@ -242,24 +217,24 @@ function renderAnimeCard(anime) {
     const progress = anime.totalEpisodes > 0
         ? (anime.currentEpisode / anime.totalEpisodes) * 100
         : 0;
-    const statusConfig = STATUS_CONFIG[anime.status];
+    const statusConfig = STATUS_CONFIG[anime.status] || STATUS_CONFIG.want;
     const typeLabel = TYPE_CONFIG[anime.type]?.label || '';
 
     if (state.settings.listStyle === 'cover') {
         const cachedCover = anime.bgmId ? coverCache[anime.bgmId] : null;
         return `
-            <div class="anime-card anime-card-cover" data-id="${anime.id}" data-bgmid="${anime.bgmId || ''}">
+            <div class="anime-card anime-card-cover" data-id="${escHtml(anime.id)}" data-bgmid="${escHtml(anime.bgmId || '')}">
                 <div class="card-cover-thumb">
                     ${cachedCover
-                        ? `<img src="${cachedCover}" alt="" class="card-cover-img" loading="lazy">`
-                        : `<div class="card-cover-placeholder">${anime.title.charAt(0)}</div>`
+                        ? `<img src="${safeImageUrl(cachedCover)}" alt="" class="card-cover-img" loading="lazy">`
+                        : `<div class="card-cover-placeholder">${escHtml(anime.title.charAt(0))}</div>`
                     }
                     ${!cachedCover && anime.bgmId
-                        ? `<img class="card-cover-img card-cover-lazy" data-src="${anime.bgmId}" alt="" style="display:none;">`
+                        ? `<img class="card-cover-img card-cover-lazy" data-src="${escHtml(anime.bgmId)}" alt="" style="display:none;">`
                         : ''}
                 </div>
                 <div class="card-cover-info">
-                    <div class="card-title">${anime.title}</div>
+                    <div class="card-title">${escHtml(anime.title)}</div>
                     <div class="card-meta">
                         <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
                         ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}</span>` : ''}
@@ -270,17 +245,17 @@ function renderAnimeCard(anime) {
                             <div class="progress-fill" style="width: ${progress}%;"></div>
                         </div>
                     </div>
-                    ${anime.status !== 'dropped' && anime.status !== 'completed' ? `<button class="card-plus-one" data-plus="${anime.id}">+1</button>` : ''}
+                    ${anime.status !== 'dropped' && anime.status !== 'completed' ? `<button class="card-plus-one" data-plus="${escHtml(anime.id)}">+1</button>` : ''}
                 </div>
             </div>
         `;
     }
 
     return `
-        <div class="anime-card" data-id="${anime.id}">
+        <div class="anime-card" data-id="${escHtml(anime.id)}">
             <div class="card-info">
                 <div style="display:flex;align-items:center;gap:0.5rem;">
-                    <div class="card-title">${anime.title}</div>
+                    <div class="card-title">${escHtml(anime.title)}</div>
                     ${anime.type === 'binge' ? `<span class="type-badge ${TYPE_CONFIG[anime.type].class}">${typeLabel}</span>` : ''}
                 </div>
                 <div class="card-meta">
@@ -297,7 +272,7 @@ function renderAnimeCard(anime) {
                 <div class="progress-bar">
                     <div class="progress-fill" style="width: ${progress}%;"></div>
                 </div>
-                ${anime.status !== 'dropped' && anime.status !== 'completed' ? `<button class="card-plus-one" data-plus="${anime.id}">+1</button>` : ''}
+                ${anime.status !== 'dropped' && anime.status !== 'completed' ? `<button class="card-plus-one" data-plus="${escHtml(anime.id)}">+1</button>` : ''}
             </div>
         </div>
     `;
@@ -305,16 +280,15 @@ function renderAnimeCard(anime) {
 
 /** 渲染详情页 */
 function renderDetailPage() {
-    const anime = state.currentAnime;
+    const anime = getCurrentAnime();
     if (!anime) {
-        setState({ currentPage: 'list' });
-        return '';
+        return renderListPage();
     }
 
     const progress = anime.totalEpisodes > 0
         ? (anime.currentEpisode / anime.totalEpisodes) * 100
         : 0;
-    const statusConfig = STATUS_CONFIG[anime.status];
+    const statusConfig = STATUS_CONFIG[anime.status] || STATUS_CONFIG.want;
 
     return `
         <header class="header">
@@ -331,7 +305,7 @@ function renderDetailPage() {
 
         <div class="detail-page">
             <div class="detail-header">
-                <h1 class="detail-title">${anime.title}</h1>
+                <h1 class="detail-title">${escHtml(anime.title)}</h1>
                 <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
                     <span class="type-badge ${TYPE_CONFIG[anime.type || 'chasing'].class}">${TYPE_CONFIG[anime.type || 'chasing'].label}</span>
                     <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
@@ -414,7 +388,7 @@ function renderDetailPage() {
                     class="form-input form-textarea"
                     id="detailReview"
                     placeholder="写下你的观后感..."
-                >${anime.review || ''}</textarea>
+                >${escHtml(anime.review || '')}</textarea>
             </div>
         </div>
     `;
@@ -460,7 +434,7 @@ function renderFormPage(anime) {
                     class="form-input"
                     id="formTitle"
                     placeholder="输入番剧名称进行搜索"
-                    value="${data.title}"
+                    value="${escHtml(data.title)}"
                     required
                 >
             </div>
@@ -569,14 +543,14 @@ function renderFormPage(anime) {
                     class="form-input form-textarea"
                     id="formReview"
                     placeholder="写下你的观后感..."
-                >${data.review || ''}</textarea>
+                >${escHtml(data.review || '')}</textarea>
             </div>
         </div>
     `;
 }
 
 /** 更新表单中类型选择的 UI */
-function updateFormTypeUI(selectedType) {
+export function updateFormTypeUI(selectedType) {
     document.querySelectorAll('[data-form-type]').forEach(btn => {
         const type = btn.dataset.formType;
         btn.className = 'type-option';
@@ -596,7 +570,7 @@ function updateFormTypeUI(selectedType) {
 }
 
 /** 更新表单中状态选择的 UI */
-function updateFormStatusUI(selectedStatus) {
+export function updateFormStatusUI(selectedStatus) {
     document.querySelectorAll('[data-form-status]').forEach(btn => {
         const status = btn.dataset.formStatus;
         btn.className = 'status-option';
@@ -607,7 +581,7 @@ function updateFormStatusUI(selectedStatus) {
 }
 
 /** 更新表单中评分选择的 UI */
-function updateFormRatingUI(selectedRating) {
+export function updateFormRatingUI(selectedRating) {
     document.querySelectorAll('#formRating .rating-star').forEach(star => {
         const rating = parseInt(star.dataset.rating);
         star.className = 'rating-star';
@@ -620,17 +594,11 @@ function updateFormRatingUI(selectedRating) {
 }
 
 /** 渲染追番提醒弹窗 */
-function showReminder() {
+export function showReminder() {
     const now = new Date();
     const todayWeekday = now.getDay() === 0 ? 7 : now.getDay();
 
-    const chasingToday = state.animeList.filter(a =>
-        a.status === 'watching' && a.type === 'chasing' && a.updateWeekDay === todayWeekday
-    );
-
-    const bingeUnfinished = state.animeList.filter(a =>
-        a.status === 'watching' && a.type === 'binge'
-    );
+    const { today: chasingToday, binge: bingeUnfinished } = getReminderItems(state.animeList, todayWeekday);
 
     if (chasingToday.length === 0 && bingeUnfinished.length === 0) return;
 
@@ -649,7 +617,7 @@ function showReminder() {
                 completeInfo = ` · 预计${cdMonth}月${cdDay}日完结`;
             }
             html += `<div class="reminder-item">
-                <span>${a.title}</span>
+                <span>${escHtml(a.title)}</span>
                 <span class="reminder-weekday">${a.currentEpisode}/${a.totalEpisodes}集${completeInfo}</span>
             </div>`;
         });
@@ -662,7 +630,7 @@ function showReminder() {
         bingeUnfinished.forEach(a => {
             const remaining = a.totalEpisodes - a.currentEpisode;
             html += `<div class="reminder-item">
-                <span>${a.title}</span>
+                <span>${escHtml(a.title)}</span>
                 <span class="reminder-weekday">${a.currentEpisode}/${a.totalEpisodes}集 · 剩余${remaining}集</span>
             </div>`;
         });
@@ -785,7 +753,7 @@ function renderSettingsPage() {
                 <h2 class="settings-section-title">关于</h2>
                 <div class="settings-row">
                     <span class="settings-label">版本</span>
-                    <span style="color:#9ca3af;font-size:0.875rem;">2.0.0</span>
+                    <span style="color:#9ca3af;font-size:0.875rem;">${APP_VERSION}</span>
                 </div>
             </div>
         </div>
@@ -793,7 +761,7 @@ function renderSettingsPage() {
 }
 
 /** 异步加载列表中所有番剧的封面图片 */
-async function loadListCovers() {
+export async function loadListCovers() {
     const lazyImgs = document.querySelectorAll('.card-cover-lazy');
     if (lazyImgs.length === 0) return;
     const bgmIds = [...new Set(Array.from(lazyImgs).map(el => el.dataset.src))];
@@ -802,7 +770,7 @@ async function loadListCovers() {
         try {
             const subject = await getBangumiSubject(bgmId);
             if (subject?.images?.medium) {
-                coverCache[bgmId] = subject.images.medium;
+                coverCache[bgmId] = safeImageUrl(subject.images.medium);
             }
         } catch (e) {}
     }));
