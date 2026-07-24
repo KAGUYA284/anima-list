@@ -31,9 +31,12 @@ function binaryResponse(statusCode, body, contentType, origin = '') {
         statusCode,
         headers: {
             'Content-Type': contentType,
+            // 显式声明传输编码：网关以 base64 承载二进制图片，
+            // 前端据此直接选择解码路径，无需再靠魔术字节猜测。
+            'X-Encoding': 'base64',
             'Cache-Control': 'public, max-age=604800, immutable',
             'X-Content-Type-Options': 'nosniff',
-            ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
+            ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Expose-Headers': 'X-Encoding' } : {}),
         },
         body: body.toString('base64'),
     };
@@ -52,7 +55,7 @@ function getAllowedImageUrl(event) {
     }
 }
 
-exports._test = { getAllowedImageUrl, isAllowedRequest };
+exports._test = { getAllowedImageUrl, isAllowedRequest, binaryResponse };
 
 function proxyImage(url, origin) {
     return new Promise(resolve => {

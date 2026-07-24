@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: android_app
-title: 追番记录 Android 应用壳
-scope:
-    - android/
-source_files: []
-depends_on: []
-related_to: []

@@ -80,10 +80,15 @@ export async function resolveBangumiImageUrl(value, endpoint = state.settings.ap
         if (!response.ok) throw new Error(`Image proxy returned ${response.status}`);
         const bytes = new Uint8Array(await response.arrayBuffer());
         let blobBytes = bytes;
-        const isKnownBinary = (bytes[0] === 0xff && bytes[1] === 0xd8)
+        // 快路径：代理显式声明编码时按其处理，无需魔术字节猜测。
+        const encoding = String(response.headers.get('X-Encoding') || '').toLowerCase();
+        const looksBinary = (bytes[0] === 0xff && bytes[1] === 0xd8)
             || (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
             || (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46)
             || (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46);
+        // 头缺失或声明 base64 时回退到启发式判断（保持向后兼容，且不会
+        // 覆盖对真实二进制的可靠识别——避免网关已解码时被误当作 base64）。
+        const isKnownBinary = looksBinary || encoding === 'binary';
         if (!isKnownBinary) {
             const base64 = new TextDecoder('ascii').decode(bytes).trim();
             if (!base64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {

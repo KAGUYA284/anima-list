@@ -27,6 +27,16 @@ test('normalizeAnimeRecord rejects calendar dates that JavaScript would roll ove
     assert.equal(record.startDate, '2026-02-28');
 });
 
+test('normalizeAnimeRecord preserves a manually selected chasing update weekday', () => {
+    const record = normalizeAnimeRecord({
+        title: 'Manual weekday',
+        type: 'chasing',
+        airDate: '2026-07-01',
+        updateWeekDay: 6,
+    });
+    assert.equal(record.updateWeekDay, 6);
+});
+
 test('readBackup supports legacy arrays and rejects invalid entries with a report', () => {
     const { records, errors } = readBackup([{ title: 'A' }, null, { title: '' }]);
     assert.equal(records.length, 1);
@@ -36,7 +46,7 @@ test('readBackup supports legacy arrays and rejects invalid entries with a repor
 test('createBackup emits a versioned portable envelope', () => {
     const backup = createBackup([{ title: 'A' }]);
     assert.equal(backup.schemaVersion, 2);
-    assert.equal(backup.appVersion, '1.1.0');
+    assert.equal(backup.appVersion, '1.2.0');
     assert.equal(backup.records[0].title, 'A');
     assert.ok(backup.exportedAt);
 });

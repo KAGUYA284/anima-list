@@ -30,12 +30,14 @@ test('classifySeason handles Japanese season boundary and binge calendar quarter
 
 test('getReminderItems separates today chasing and active binge records', () => {
     const list = [
-        { status: 'watching', type: 'chasing', updateWeekDay: 4 },
+        { status: 'watching', type: 'chasing', updateWeekDay: 4, airDate: '2026-07-02', totalEpisodes: 12 },
+        { status: 'want', type: 'chasing', updateWeekDay: 4, airDate: '2026-07-09', totalEpisodes: 12 },
+        { status: 'want', type: 'chasing', updateWeekDay: 4, airDate: '2026-07-30', totalEpisodes: 12 },
         { status: 'watching', type: 'binge' },
         { status: 'completed', type: 'chasing', updateWeekDay: 4 },
     ];
-    const result = getReminderItems(list, 4);
-    assert.equal(result.today.length, 1);
+    const result = getReminderItems(list, 4, new Date('2026-07-23T12:00:00'));
+    assert.equal(result.today.length, 2);
     assert.equal(result.binge.length, 1);
 });
 

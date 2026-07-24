@@ -10,6 +10,29 @@ export const DEFAULT_SETTINGS = {
 
 let renderCallback = () => {};
 
+function localDateString(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function applyCompletionDate(previous, updates) {
+    const next = { ...previous, ...updates };
+    if (next.type !== 'binge') return next;
+
+    if (previous.status !== 'completed' && next.status === 'completed' && !next.completedDate) {
+        next.completedDate = localDateString();
+    } else if (
+        previous.status === 'completed'
+        && next.status !== 'completed'
+        && !Object.hasOwn(updates, 'completedDate')
+    ) {
+        next.completedDate = '';
+    }
+    return next;
+}
+
 export let state = {
     animeList: loadFromStorage(),
     filter: 'all',
@@ -54,7 +77,8 @@ export function getCurrentAnime() {
 
 export function addAnime(animeData) {
     const now = new Date().toISOString();
-    const anime = normalizeAnimeRecord({ ...animeData, id: generateId(), createdAt: now, updatedAt: now });
+    const initial = applyCompletionDate({ status: '', type: animeData.type }, animeData);
+    const anime = normalizeAnimeRecord({ ...initial, id: generateId(), createdAt: now, updatedAt: now });
     const animeList = [...state.animeList, anime];
     if (!saveToStorage(animeList)) return false;
     setState({ animeList, currentPage: 'list', currentAnimeId: null });
@@ -66,7 +90,11 @@ export function updateAnime(id, updates, { render = true } = {}) {
     const animeList = state.animeList.map(anime => {
         if (anime.id !== id) return anime;
         changed = true;
-        return normalizeAnimeRecord({ ...anime, ...updates, id, updatedAt: new Date().toISOString() });
+        return normalizeAnimeRecord({
+            ...applyCompletionDate(anime, updates),
+            id,
+            updatedAt: new Date().toISOString(),
+        });
     });
     if (!changed || !saveToStorage(animeList)) return false;
     setState({ animeList }, { render });

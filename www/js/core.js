@@ -35,9 +35,27 @@ export function classifySeason(dateString, type = 'chasing') {
     return { year, quarter: calendarQuarter };
 }
 
-export function getReminderItems(animeList, todayWeekday) {
+function isInBroadcastWindow(anime, today) {
+    if (!anime.airDate) return true;
+    const premiere = new Date(`${anime.airDate}T00:00:00`);
+    if (Number.isNaN(premiere.getTime())) return true;
+
+    const lastEpisode = new Date(premiere);
+    const totalEpisodes = Math.max(1, Number(anime.totalEpisodes) || 1);
+    lastEpisode.setDate(lastEpisode.getDate() + (totalEpisodes - 1) * 7);
+    return today >= premiere && today <= lastEpisode;
+}
+
+export function getReminderItems(animeList, todayWeekday, now = new Date()) {
+    const today = now instanceof Date ? new Date(now) : new Date(now);
+    today.setHours(0, 0, 0, 0);
     return {
-        today: animeList.filter(a => a.status === 'watching' && a.type === 'chasing' && a.updateWeekDay === todayWeekday),
+        today: animeList.filter(a =>
+            (a.status === 'watching' || a.status === 'want')
+            && a.type === 'chasing'
+            && a.updateWeekDay === todayWeekday
+            && isInBroadcastWindow(a, today)
+        ),
         binge: animeList.filter(a => a.status === 'watching' && a.type === 'binge'),
     };
 }

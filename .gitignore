@@ -19,6 +19,8 @@ dist/
 PC便携预览版/
 .desktop-build/
 Anima Tracker/
+Anima List/
+Anima List.zip
 发布版本/
 *.keystore
 *.jks

@@ -1,0 +1,149 @@
+// ============================================================
+// 事件处理 · 列表页 - Anime Tracker
+// ============================================================
+
+import { changeProgress } from '../core.js';
+import { getAnimeById, setState, state, updateAnime } from '../store.js';
+import { loadCollapsed, saveCollapsed } from '../storage.js';
+import { loadListCovers } from '../renderer/list.js';
+import { render } from '../renderer/index.js';
+import { attachIoModals } from './io.js';
+
+/** 绑定列表页事件 */
+export function attachListEvents() {
+    // 移动端检测
+    if (window.Capacitor || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        document.body.classList.add('is-mobile');
+    } else {
+        document.body.classList.remove('is-mobile');
+    }
+
+    // Android 状态栏安全区域兜底（CSS env() 可能返回 0）
+    if (/Android/i.test(navigator.userAgent)) {
+        const header = document.querySelector('.header');
+        if (header) {
+            const ptop = parseFloat(getComputedStyle(header).paddingTop);
+            // 如果 env(safe-area-inset-top) 为 0，补充最小安全间距
+            if (ptop < 20) {
+                header.style.paddingTop = (ptop + 24) + 'px';
+            }
+        }
+    }
+
+    // 筛选按钮
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setState({ filter: btn.dataset.filter });
+        });
+    });
+
+    // 搜索输入（支持中文输入法组合）
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        let composing = false;
+        const doSearch = (val) => {
+            state.searchQuery = val;
+            render();
+            const si = document.getElementById('searchInput');
+            if (si) {
+                si.focus();
+                si.setSelectionRange(val.length, val.length);
+            }
+        };
+        searchInput.addEventListener('compositionstart', () => { composing = true; });
+        searchInput.addEventListener('compositionend', (e) => {
+            composing = false;
+            doSearch(e.target.value);
+        });
+        searchInput.addEventListener('input', (e) => {
+            if (!composing) {
+                doSearch(e.target.value);
+            }
+        });
+    }
+
+    // 年份折叠/展开
+    document.querySelectorAll('[data-toggle="year"]').forEach(header => {
+        header.addEventListener('click', () => {
+            const targetId = header.dataset.target;
+            const content = document.getElementById(targetId);
+            const icon = document.getElementById(targetId + '-icon');
+            if (!content || !icon) return;
+            const isCollapsed = content.classList.contains('collapsed');
+            const saved = loadCollapsed();
+            if (isCollapsed) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = '9999px';
+                icon.classList.remove('collapsed');
+                saveCollapsed(saved.filter(id => id !== targetId));
+            } else {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0px';
+                icon.classList.add('collapsed');
+                if (!saved.includes(targetId)) saved.push(targetId);
+                saveCollapsed(saved);
+            }
+        });
+    });
+
+    // 季度折叠/展开
+    document.querySelectorAll('[data-toggle="quarter"]').forEach(header => {
+        header.addEventListener('click', () => {
+            const targetId = header.dataset.target;
+            const content = document.getElementById(targetId);
+            const icon = document.getElementById(targetId + '-icon');
+            if (!content || !icon) return;
+            const isCollapsed = content.classList.contains('collapsed');
+            const saved = loadCollapsed();
+            if (isCollapsed) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = '9999px';
+                icon.classList.remove('collapsed');
+                saveCollapsed(saved.filter(id => id !== targetId));
+            } else {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0px';
+                icon.classList.add('collapsed');
+                if (!saved.includes(targetId)) saved.push(targetId);
+                saveCollapsed(saved);
+            }
+        });
+    });
+
+    // 添加按钮
+    const addBtn = document.getElementById('addAnimeBtn');
+    const addFirstBtn = document.getElementById('addFirstAnime');
+    if (addBtn) addBtn.addEventListener('click', () => setState({ currentPage: 'add' }));
+    if (addFirstBtn) addFirstBtn.addEventListener('click', () => setState({ currentPage: 'add' }));
+
+    // 设置按钮
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (settingsBtn) settingsBtn.addEventListener('click', () => setState({ currentPage: 'settings' }));
+
+    // 番剧卡片点击 → 详情页
+    document.querySelectorAll('.anime-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const id = card.dataset.id;
+            setState({ currentPage: 'detail', currentAnimeId: id });
+        });
+    });
+
+    // +1 按钮
+    document.querySelectorAll('[data-plus]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.plus;
+            const anime = getAnimeById(id);
+            if (!anime) return;
+            updateAnime(id, changeProgress(anime, 1));
+        });
+    });
+
+    // 导入/导出弹窗（位于 #app 外，仅绑定一次）
+    attachIoModals();
+
+    // 封面模式加载番剧封面
+    if (state.settings.listStyle === 'cover') {
+        setTimeout(() => loadListCovers(), 100);
+    }
+}
