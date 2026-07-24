@@ -22,7 +22,8 @@ const manifest = readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8'
 const indexHtml = readFileSync('www/index.html', 'utf8');
 const appEntry = readFileSync('www/js/app.js', 'utf8');
 const electronMain = readFileSync('electron/main.cjs', 'utf8');
-const pcLauncher = readFileSync('启动PC版.cmd', 'utf8');
+const webLauncher = readFileSync('scripts/release/启动网页版.cmd', 'utf8');
+const webServer = readFileSync('scripts/release/server.ps1', 'utf8');
 // 拆分后前端逻辑分散在多个文件，故对整个 www/js 目录的拼接内容做断言，
 // 避免绑定到具体文件名（模块再拆分时不误报）。
 const webSource = sourceFiles
@@ -51,8 +52,11 @@ if (!webSource.includes('代理\n') && !webSource.includes('代理\r\n')) {
 if (!electronMain.includes('contextIsolation: true') || !electronMain.includes('nodeIntegration: false') || !electronMain.includes('sandbox: true')) {
     throw new Error('Electron 便携版必须启用隔离渲染安全配置');
 }
-if (!pcLauncher.includes('npm run dev -- --host 127.0.0.1') || !pcLauncher.includes('Invoke-WebRequest')) {
-    throw new Error('PC 双击启动器缺少本地服务或就绪检查');
+if (!electronMain.includes("app.setPath('userData'") || !electronMain.includes('.anima-list-cache-test')) {
+    throw new Error('Electron 缓存测试版缺少独立 userData 配置');
+}
+if (!webLauncher.includes('server.ps1') || !webServer.includes('TcpListener') || !webServer.includes('Start-Process')) {
+    throw new Error('网页版启动器缺少本地静态服务或浏览器启动逻辑');
 }
 if (!webSource.includes('encoding: Encoding.UTF8') || !webSource.includes('await Share.share')) {
     throw new Error('移动端 JSON 导出必须使用 UTF-8 文件写入与原生分享');

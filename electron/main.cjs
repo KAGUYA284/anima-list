@@ -1,5 +1,13 @@
+const { existsSync } = require('node:fs');
 const { app, BrowserWindow, session, shell } = require('electron');
 const path = require('node:path');
+
+// 缓存测试版随包放置此标记文件。其浏览器缓存、Local Storage、IndexedDB
+// 等数据固定写入解压目录，便于携带和复现；正式便携版不放置该标记。
+const portableCacheMarker = path.join(path.dirname(process.execPath), '.anima-list-cache-test');
+if (existsSync(portableCacheMarker)) {
+    app.setPath('userData', path.join(path.dirname(process.execPath), 'test-user-data'));
+}
 
 function createWindow() {
     const window = new BrowserWindow({

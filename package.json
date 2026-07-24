@@ -46,6 +46,8 @@
     "desktop:preview": "npm run build && electron-builder --win dir && node scripts/flatten-desktop-build.mjs",
     "desktop:installer": "npm run build && electron-builder --win nsis",
     "android:release": "npm run sync && node scripts/create-release-keystore.mjs && cd android && gradlew.bat assembleRelease",
+    "release:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1",
+    "release:all": "npm run check && npm run desktop:preview && npm run desktop:installer && npm run android:release && npm run release:package",
     "lint": "node scripts/check-source.mjs",
     "check:dist": "node scripts/check-dist.mjs",
     "test": "node tests/run-tests.mjs",

@@ -5,9 +5,10 @@
 
 | 端 | 外壳 | 产物 |
 | --- | --- | --- |
-| Web / 移动 | Capacitor（Android / iOS） | APK / IPA |
-| 桌面便携版 | Electron | `Anima List/`、`Anima List.zip` |
-| Windows 安装版 | Electron + NSIS | `Anima-List-Setup-1.2.0.exe` |
+| Web | Vite 静态文件 + PowerShell 启动器 | `发布版本/v1.2.0/Web/` |
+| Android / iOS | Capacitor | APK / IPA |
+| Windows 免安装版 | Electron | 正式无缓存包、缓存测试包 |
+| Windows 安装版 | Electron + NSIS | NSIS 安装程序 |
 | 番剧数据代理 | 腾讯云 SCF | `scf_bangumi_proxy.js` |
 
 ## 目录速览
@@ -19,6 +20,8 @@
   - `api.js` / `core.js` / `data.js` / `storage.js` / `grouping.js`（纯函数）/ `constants.js` / `utils.js`
 - `scripts/` — 构建脚本（版本同步、产物校验、源码检查、发布密钥）
 - `tests/` — 基于 `node:test` 的单元测试
+- `docs/` — 累计工作说明、升级计划和架构分析
+- `发布版本/v<版本号>/` — 面向用户和测试人员的最终产物（Git 忽略）
 - `scf_bangumi_proxy.js` — Bangumi API + 图片代理（CORS/路径白名单、体积限制）
 
 ## 常用命令
@@ -34,7 +37,31 @@ npm run sync           # 打包并 `cap sync` 到原生工程（Android/iOS）
 npm run android:release# 生成发布密钥并出 Android release APK
 npm run desktop:preview# 打包并用 electron-builder 出便携版目录
 npm run desktop:installer# 打包并生成 Windows NSIS 安装程序
+npm run release:package# 将已构建产物整理为统一发布目录
+npm run release:all   # 检查并构建、整理 Windows / Android / Web 全部产物
 ```
+
+## 发布目录
+
+`npm run release:all` 完成后，当前版本统一放在 `发布版本/v1.2.0/`：
+
+```text
+发布版本/v1.2.0/
+├─ Windows/
+│  ├─ 安装版/Anima-List-Setup-1.2.0.exe
+│  ├─ 免安装版/Anima-List-v1.2.0-Portable.zip
+│  └─ 缓存测试版/Anima-List-v1.2.0-Portable-Cache-Test.zip
+├─ Android/Anima-List-v1.2.0-signed.apk
+├─ Web/
+│  ├─ 启动网页版.cmd
+│  ├─ server.ps1
+│  └─ web/
+└─ 版本说明.txt
+```
+
+正式免安装版不携带运行缓存。缓存测试版会把缓存、Local Storage 和 IndexedDB
+固定保存在解压目录的 `test-user-data/` 中，删除该目录即可重置。网页版双击
+`启动网页版.cmd` 即可运行，不依赖 Node.js。
 
 ## 版本号单一来源
 
@@ -56,13 +83,11 @@ npm run desktop:installer# 打包并生成 Windows NSIS 安装程序
 3. **同步版本号**：`npm run sync:version`（`prebuild` 也会自动跑）。
 4. **过门禁**：`npm run check` 全绿（lint + test + build + dist 校验）。
 5. **代理**：如改动 `scf_bangumi_proxy.js`，重新部署腾讯云 SCF 并确认线上生效。
-6. **出三端产物**：
-   - Android：`npm run android:release`（需 `android/keystore.properties`，见 `keystore.properties.example`）
-   - 桌面便携版：`npm run desktop:preview`
-   - Windows 安装版：`npm run desktop:installer`
-   - 移动工程同步：`npm run sync`
+6. **出多端产物**：执行 `npm run release:all`。Android 签名需要
+   `android/keystore.properties`，格式见 `keystore.properties.example`。
 7. **冒烟测试**：安装 APK / 运行便携版，验证列表、详情、导入导出、图片代理正常。
-8. **归档**：签名 APK 与 Windows 安装程序放入 `发布版本/`，便携版压缩为 `Anima List.zip`。
+8. **核对归档**：确认 `发布版本/v<版本号>/` 中的安装版、两种免安装版、APK
+   和 Web 启动器齐全。
 
 ## 安全约定（由 `check-source.mjs` 守卫）
 

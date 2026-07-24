@@ -18,9 +18,9 @@ _server.js
 dist/
 PC便携预览版/
 .desktop-build/
+.release-staging/
 Anima Tracker/
 Anima List/
-Anima List.zip
 发布版本/
 *.keystore
 *.jks
