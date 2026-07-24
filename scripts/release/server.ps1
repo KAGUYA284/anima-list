@@ -61,7 +61,7 @@ function Send-Response {
 $url = "http://127.0.0.1:$port/"
 Write-Host "[Anima List] 网页版已启动：$url"
 Write-Host '关闭此窗口即可停止服务。'
-if ($NoBrowser) {
+if ($NoBrowser -or $env:ANIMA_LIST_NO_BROWSER -eq '1') {
     Write-Host '[Anima List] 无浏览器测试模式。'
 } else {
     Start-Process $url
