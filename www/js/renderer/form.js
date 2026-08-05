@@ -18,6 +18,7 @@ export function renderFormPage(anime) {
         airDate: '',
         type: 'chasing',
         updateWeekDay: '',
+        updateTime: '',
         completedDate: ''
     };
     const currentType = data.type || 'chasing';
@@ -117,6 +118,18 @@ export function renderFormPage(anime) {
                         `).join('')}
                     </select>
                     <div id="chasingWeekdayInfo" style="padding:0.375rem 0 0;color:#6b7280;font-size:0.75rem;"></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">具体更新时间</label>
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        class="form-input"
+                        id="formUpdateTime"
+                        placeholder="例如 22:00；深夜档可填写 25:30"
+                        value="${escHtml(data.updateTime || '')}"
+                        maxlength="5"
+                    >
                 </div>
             </div>
 

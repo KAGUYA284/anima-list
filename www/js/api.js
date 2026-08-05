@@ -273,3 +273,21 @@ export function getCachedBangumiSubject(id) {
     const key = `${getApiBaseUrl()}:subject:${id}`;
     return getCacheEntry(key)?.value || null;
 }
+
+export function getYucAnime({ title = '', titleCn = '', titleJp = '', airDate = '' } = {}) {
+    const query = new URLSearchParams();
+    if (title) query.set('title', String(title).slice(0, 300));
+    if (titleCn) query.set('titleCn', String(titleCn).slice(0, 300));
+    if (titleJp) query.set('titleJp', String(titleJp).slice(0, 300));
+    if (airDate) query.set('airDate', String(airDate).slice(0, 10));
+    if (![...query.keys()].some(key => key.startsWith('title'))) return Promise.resolve(null);
+
+    const key = `${API_PROXIES.proxy1}:yuc:${query}`;
+    return cachedRequest(key, async () => {
+        const data = await apiFetch(`${API_PROXIES.proxy1}/yuc/anime?${query}`, {}, {
+            retries: 1,
+            timeoutMs: 15000,
+        });
+        return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+    }, 6 * 60 * 60 * 1000);
+}

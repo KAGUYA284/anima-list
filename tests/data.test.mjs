@@ -33,8 +33,11 @@ test('normalizeAnimeRecord preserves a manually selected chasing update weekday'
         type: 'chasing',
         airDate: '2026-07-01',
         updateWeekDay: 6,
+        updateTime: '25:30',
     });
     assert.equal(record.updateWeekDay, 6);
+    assert.equal(record.updateTime, '25:30');
+    assert.equal(normalizeAnimeRecord({ title: 'Invalid time', updateTime: '30:10' }).updateTime, '');
 });
 
 test('readBackup supports legacy arrays and rejects invalid entries with a report', () => {

@@ -9,7 +9,7 @@
 | Android / iOS | Capacitor | APK / IPA |
 | Windows 免安装版 | Electron | 正式无缓存包、缓存测试包 |
 | Windows 安装版 | Electron + NSIS | NSIS 安装程序 |
-| 番剧数据代理 | 腾讯云 SCF | `scf_bangumi_proxy.js` |
+| 番剧数据代理 | 腾讯云 SCF | Bangumi API/图片代理 + yuc.wiki 季度信息抓取 |
 
 ## 目录速览
 
@@ -22,7 +22,20 @@
 - `tests/` — 基于 `node:test` 的单元测试
 - `docs/` — 累计工作说明、升级计划和架构分析
 - `发布版本/v<版本号>/` — 面向用户和测试人员的最终产物（Git 忽略）
-- `scf_bangumi_proxy.js` — Bangumi API + 图片代理（CORS/路径白名单、体积限制）
+- `scf_bangumi_proxy.js` — Bangumi API/图片代理及 yuc.wiki 季度页解析（CORS/路径白名单、体积限制、缓存）
+
+## 番剧信息来源
+
+设置页的“更新时间来源”支持“1. 长门有希”和“2. bangumi”。长门有希模式通过
+腾讯云 SCF 的 `/yuc/anime` 路由读取 `yuc.wiki/YYYYMM/` 季度页，按封面和标准化
+中日文标题映射番剧，获取首播日期、每周更新时间（具体到小时）以及原作、导演、
+副导演、编剧、人物设计、动画人设、动画制作。详情页信息可通过“显示番剧具体信息”
+单独开关。
+
+代理仅访问固定的 `yuc.wiki` 主机和季度路径，并把远端 HTML 解析成白名单纯文本字段，
+不会执行或向客户端透传页面脚本。当前该站 HTTPS 证书已过期，因此代理暂时从同一
+固定主机的公开 HTTP 页面读取数据；应用到代理的连接仍使用 HTTPS。站点证书恢复后，
+应将抓取传输切回 HTTPS。
 
 ## 常用命令
 
@@ -82,7 +95,8 @@ npm run release:all   # 检查并构建、整理 Windows / Android / Web 全部�
 2. **递增 versionCode**：在 `android/app/build.gradle` 手动 +1。
 3. **同步版本号**：`npm run sync:version`（`prebuild` 也会自动跑）。
 4. **过门禁**：`npm run check` 全绿（lint + test + build + dist 校验）。
-5. **代理**：如改动 `scf_bangumi_proxy.js`，重新部署腾讯云 SCF 并确认线上生效。
+5. **代理**：如改动 `scf_bangumi_proxy.js`，重新部署腾讯云 SCF，并确认
+   `/yuc/anime`、Bangumi API 和图片代理均在线生效。
 6. **出多端产物**：执行 `npm run release:all`。Android 签名需要
    `android/keystore.properties`，格式见 `keystore.properties.example`。
 7. **冒烟测试**：安装 APK / 运行便携版，验证列表、详情、导入导出、图片代理正常。

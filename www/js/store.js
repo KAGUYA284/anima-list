@@ -6,6 +6,8 @@ export const DEFAULT_SETTINGS = {
     listStyle: 'text',
     darkMode: false,
     apiEndpoint: 'direct',
+    updateSource: 'yuc',
+    showAnimeDetails: true,
 };
 
 let renderCallback = () => {};

@@ -4,7 +4,7 @@
 
 import { WEEK_DAYS } from '../constants.js';
 import { deriveStatus } from '../core.js';
-import { getBangumiSubject, searchBangumi } from '../api.js';
+import { getBangumiSubject, getYucAnime, searchBangumi } from '../api.js';
 import { addAnime, setState, state, updateAnime } from '../store.js';
 import { escHtml, getWeekDayFromDate, showToast } from '../utils.js';
 import { updateFormRatingUI, updateFormStatusUI, updateFormTypeUI } from '../renderer/form.js';
@@ -22,13 +22,16 @@ export function attachFormEvents(anime) {
 
     const formAirDate = document.getElementById('formAirDate');
     const formUpdateWeekDay = document.getElementById('formUpdateWeekDay');
+    const formUpdateTime = document.getElementById('formUpdateTime');
     const chasingWeekdayInfo = document.getElementById('chasingWeekdayInfo');
 
     function updateChasingWeekdayHint(source = 'manual') {
         if (!formUpdateWeekDay || !chasingWeekdayInfo) return;
         const weekday = Number(formUpdateWeekDay.value) || 0;
+        const time = formUpdateTime?.value.trim() || '';
+        const sourceLabel = source === 'yuc' ? '长门有希' : source === 'date' ? '已根据放送日期推断' : '当前设置';
         chasingWeekdayInfo.textContent = weekday
-            ? `${source === 'date' ? '已根据放送日期推断' : '当前设置'}：${WEEK_DAYS[weekday]}更新`
+            ? `${sourceLabel}：${WEEK_DAYS[weekday]}${time ? ` ${time}` : ''}更新`
             : '选择实际的每周更新时间';
     }
 
@@ -45,6 +48,7 @@ export function attachFormEvents(anime) {
 
     formAirDate?.addEventListener('change', () => syncChasingWeekdayFromDate(true));
     formUpdateWeekDay?.addEventListener('change', () => updateChasingWeekdayHint('manual'));
+    formUpdateTime?.addEventListener('input', () => updateChasingWeekdayHint('manual'));
     syncChasingWeekdayFromDate(false);
 
     document.getElementById('backToList').addEventListener('click', () => {
@@ -210,6 +214,7 @@ export function attachFormEvents(anime) {
 
         let airDate = '';
         let updateWeekDay = '';
+        let updateTime = '';
         let completedDate = '';
         let startDate = '';
 
@@ -217,6 +222,11 @@ export function attachFormEvents(anime) {
             airDate = document.getElementById('formAirDate')?.value || '';
             updateWeekDay = Number(document.getElementById('formUpdateWeekDay')?.value)
                 || getWeekDayFromDate(airDate);
+            updateTime = document.getElementById('formUpdateTime')?.value.trim() || '';
+            if (updateTime && !/^(?:[01]\d|2\d):[0-5]\d$/.test(updateTime)) {
+                alert('具体更新时间格式应为 HH:MM，可使用 24:00 至 29:59 表示日本深夜档');
+                return;
+            }
         } else {
             airDate = document.getElementById('formBingeAirDate')?.value || '';
             startDate = document.getElementById('formAirDateBinge')?.value || '';
@@ -235,6 +245,7 @@ export function attachFormEvents(anime) {
             airDate,
             type: formData.type,
             updateWeekDay,
+            updateTime,
             completedDate,
             startDate,
             bgmId: selectedBgmId || (anime?.bgmId || '')
@@ -327,9 +338,35 @@ export function attachFormEvents(anime) {
                             }
                         }
 
+                        let yucMatched = false;
+                        if ((formData.type || 'chasing') === 'chasing' && state.settings.updateSource === 'yuc') {
+                            try {
+                                const yuc = await getYucAnime({
+                                    title: detail.name_cn || detail.name,
+                                    titleCn: detail.name_cn || '',
+                                    titleJp: detail.name || '',
+                                    airDate: detail.date || '',
+                                });
+                                if (yuc?.schedule) {
+                                    const airDateInput = document.getElementById('formAirDate');
+                                    if (airDateInput && yuc.schedule.airDate) airDateInput.value = yuc.schedule.airDate;
+                                    if (formUpdateWeekDay && yuc.schedule.updateWeekDay) {
+                                        formUpdateWeekDay.value = String(yuc.schedule.updateWeekDay);
+                                    }
+                                    if (formUpdateTime) formUpdateTime.value = yuc.schedule.updateTime || '';
+                                    updateChasingWeekdayHint('yuc');
+                                    yucMatched = true;
+                                }
+                            } catch (error) {
+                                console.warn('[Yuc] 更新时间查询失败，保留 Bangumi 日期', error);
+                            }
+                        } else if (formUpdateTime) {
+                            formUpdateTime.value = '';
+                        }
+
                         bgmResults.style.display = 'none';
                         lastKeyword = detail.name_cn || detail.name || '';
-                        showToast('已自动填写番剧信息');
+                        showToast(yucMatched ? '已从长门有希填写播出日期和具体时间' : '已自动填写番剧信息');
                     } catch (e) {
                         item.innerHTML = '<div class="bgm-loading" style="color:#f87171;">加载失败</div>';
                     }

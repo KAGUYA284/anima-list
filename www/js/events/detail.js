@@ -3,8 +3,8 @@
 // ============================================================
 
 import { changeProgress, extractAnimationStudio } from '../core.js';
-import { getBangumiCharacters, getBangumiImageUrl, getBangumiPersons, getBangumiSubject, hydrateBangumiImages } from '../api.js';
-import { deleteAnime, getAnimeById, getCurrentAnime, setState, updateAnime } from '../store.js';
+import { getBangumiCharacters, getBangumiImageUrl, getBangumiPersons, getBangumiSubject, getYucAnime, hydrateBangumiImages } from '../api.js';
+import { deleteAnime, getAnimeById, getCurrentAnime, setState, state, updateAnime } from '../store.js';
 import { escHtml, safeImageUrl } from '../utils.js';
 
 /** 绑定详情页事件 */
@@ -65,6 +65,13 @@ export function attachDetailEvents() {
             if (container) container.innerHTML = '';
         });
     }
+    if (state.settings.showAnimeDetails) {
+        loadYucDetailInto(anime).catch(error => {
+            console.warn('[Detail] 长门有希详情加载失败:', error);
+            const container = document.getElementById('yucDetail');
+            if (container) container.innerHTML = '';
+        });
+    }
 
     // ======== 单集记录编辑 ========
     document.querySelectorAll('.episode-item').forEach(item => {
@@ -73,6 +80,57 @@ export function attachDetailEvents() {
             showEpisodeEditor(anime, ep);
         });
     });
+}
+
+async function loadYucDetailInto(anime) {
+    const container = document.getElementById('yucDetail');
+    if (!container) return;
+    container.innerHTML = '<div class="bgm-loading">正在匹配长门有希制作信息...</div>';
+
+    let subject = null;
+    if (anime.bgmId) {
+        try {
+            subject = await getBangumiSubject(anime.bgmId);
+        } catch (error) {
+            console.warn('[Yuc] Bangumi 标题别名加载失败', error);
+        }
+    }
+    const yuc = await getYucAnime({
+        title: anime.title,
+        titleCn: subject?.name_cn || '',
+        titleJp: subject?.name || '',
+        airDate: anime.airDate,
+    });
+    const staff = yuc?.staff || {};
+    const fields = [
+        ['原作', staff.originalWork],
+        ['导演', staff.director],
+        ['副导演', staff.assistantDirector],
+        ['编剧', staff.seriesComposition],
+        ['人物设计', staff.characterDesign],
+        ['动画人设', staff.animationCharacterDesign],
+        ['动画制作', staff.animationStudio],
+    ].filter(([, value]) => value);
+    if (fields.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const sourceUrl = /^https:\/\/yuc\.wiki\/\d{6}\/$/.test(yuc.sourceUrl || '') ? yuc.sourceUrl : 'https://yuc.wiki/';
+    container.innerHTML = `
+        <div class="yuc-detail-header">
+            <h2 class="detail-section-title">制作信息</h2>
+            <a href="${escHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">来源：长门有希</a>
+        </div>
+        <div class="yuc-staff-grid">
+            ${fields.map(([label, value]) => `
+                <div class="yuc-staff-row">
+                    <span class="info-label">${label}</span>
+                    <span>${escHtml(value)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
 }
 
 /** 加载 Bangumi 详情（异步渲染到 #bangumiDetail） */

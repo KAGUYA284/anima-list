@@ -24,6 +24,7 @@ const appEntry = readFileSync('www/js/app.js', 'utf8');
 const electronMain = readFileSync('electron/main.cjs', 'utf8');
 const webLauncher = readFileSync('scripts/release/启动网页版.cmd', 'utf8');
 const webServer = readFileSync('scripts/release/server.ps1', 'utf8');
+const proxySource = readFileSync('scf_bangumi_proxy.js', 'utf8');
 // 拆分后前端逻辑分散在多个文件，故对整个 www/js 目录的拼接内容做断言，
 // 避免绑定到具体文件名（模块再拆分时不误报）。
 const webSource = sourceFiles
@@ -60,6 +61,18 @@ if (!webLauncher.includes('server.ps1') || !webServer.includes('TcpListener') ||
 }
 if (!webSource.includes('encoding: Encoding.UTF8') || !webSource.includes('await Share.share')) {
     throw new Error('移动端 JSON 导出必须使用 UTF-8 文件写入与原生分享');
+}
+if (!proxySource.includes("path === '/yuc/anime'") || !proxySource.includes("hostname: 'yuc.wiki'")) {
+    throw new Error('SCF 代理缺少固定主机的长门有希季度信息抓取路由');
+}
+if (!webSource.includes("updateSource: 'yuc'") || !webSource.includes('showAnimeDetails: true')) {
+    throw new Error('设置缺少长门有希更新时间来源或番剧具体信息开关');
+}
+if (!webSource.includes('1. 长门有希') || !webSource.includes('2. bangumi')) {
+    throw new Error('更新时间来源选项名称不符合产品约定');
+}
+if (!webSource.includes('getYucAnime') || !webSource.includes('formUpdateTime')) {
+    throw new Error('前端缺少长门有希信息查询或具体更新时间字段');
 }
 
 // 版本号单一来源守卫：package.json / constants.js / build.gradle 必须一致。

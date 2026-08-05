@@ -3,7 +3,7 @@
 // ============================================================
 
 import { STATUS_CONFIG, TYPE_CONFIG, WEEK_DAYS } from '../constants.js';
-import { getCurrentAnime } from '../store.js';
+import { getCurrentAnime, state } from '../store.js';
 import { escHtml, renderEditableStars } from '../utils.js';
 import { renderListPage } from './list.js';
 
@@ -48,6 +48,7 @@ export function renderDetailPage() {
 
             <!-- Bangumi 详情区域（通过 JS 异步加载） -->
             <div id="bangumiDetail" class="detail-section"></div>
+            ${state.settings.showAnimeDetails ? '<div id="yucDetail" class="detail-section"></div>' : ''}
 
             <div class="detail-section">
                 <h2 class="detail-section-title">基本信息</h2>
@@ -60,7 +61,7 @@ export function renderDetailPage() {
                 ${anime.type === 'chasing' ? `
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
-                        <span>${anime.updateWeekDay ? WEEK_DAYS[anime.updateWeekDay] : '-'}</span>
+                        <span>${anime.updateWeekDay ? WEEK_DAYS[anime.updateWeekDay] : '-'}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}</span>
                     </div>
                 ` : `
                     ${anime.startDate ? `

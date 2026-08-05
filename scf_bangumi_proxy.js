@@ -1,13 +1,20 @@
 /** Tencent Cloud SCF proxy for the small Bangumi API surface used by the app. */
 const https = require('https');
+const http = require('http');
 
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const TIMEOUT_MS = 10000;
-const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS || 'https://localhost,http://localhost:5173,http://127.0.0.1:5173')
-    .split(',')
+const defaultOrigins = [
+    'null',
+    'https://localhost',
+    'http://localhost:5173',
+    ...Array.from({ length: 21 }, (_, index) => `http://127.0.0.1:${4173 + index}`),
+];
+const allowedOrigins = new Set([...defaultOrigins, ...(process.env.ALLOWED_ORIGINS || '').split(',')]
     .map(value => value.trim())
     .filter(Boolean));
+const yucPageCache = new Map();
 
 function response(statusCode, body = '', extraHeaders = {}, origin = '') {
     return {
@@ -55,8 +62,6 @@ function getAllowedImageUrl(event) {
     }
 }
 
-exports._test = { getAllowedImageUrl, isAllowedRequest, binaryResponse };
-
 function proxyImage(url, origin) {
     return new Promise(resolve => {
         let settled = false;
@@ -71,7 +76,7 @@ function proxyImage(url, origin) {
             port: 443,
             path: `${url.pathname}${url.search}`,
             method: 'GET',
-            headers: { 'User-Agent': 'AnimeTracker/1.1.0' },
+            headers: { 'User-Agent': 'AnimaList/1.2.0' },
         }, upstream => {
             const contentType = String(upstream.headers['content-type'] || '').split(';')[0];
             if (upstream.statusCode !== 200 || !/^image\/(?:jpeg|png|webp|gif)$/.test(contentType)) {
@@ -106,6 +111,261 @@ function isAllowedRequest(method, path) {
     return false;
 }
 
+function decodeHtml(value) {
+    return String(value || '')
+        .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+        .replace(/&#x([\da-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/&apos;|&#39;/gi, "'")
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>');
+}
+
+function htmlLines(value) {
+    return decodeHtml(String(value || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, ' '))
+        .split(/\n+/)
+        .map(line => line.replace(/[\t\r\u00a0　]+/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+}
+
+function htmlText(value) {
+    return htmlLines(value).join(' ').trim();
+}
+
+function classContent(html, classPrefix) {
+    const pattern = new RegExp(`<([a-z][a-z0-9]*)[^>]*class=["'][^"']*${classPrefix}[^"']*["'][^>]*>([\\s\\S]*?)<\\/\\1>`, 'i');
+    return pattern.exec(html)?.[2] || '';
+}
+
+function normalizeYucTitle(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .toLocaleLowerCase('zh-CN')
+        .replace(/(?:第\s*[\d一二三四五六七八九十]+\s*[季期]|season\s*\d+|part\.?\s*\d+)/gi, '')
+        .replace(/[\p{P}\p{S}\s]/gu, '');
+}
+
+function titleScore(left, right) {
+    const a = normalizeYucTitle(left);
+    const b = normalizeYucTitle(right);
+    if (!a || !b) return 0;
+    if (a === b) return 100;
+    if (Math.min(a.length, b.length) >= 4 && (a.includes(b) || b.includes(a))) return 82;
+    const grams = value => {
+        if (value.length < 2) return [value];
+        return Array.from({ length: value.length - 1 }, (_, index) => value.slice(index, index + 2));
+    };
+    const aGrams = grams(a);
+    const remaining = grams(b);
+    let matches = 0;
+    for (const gram of aGrams) {
+        const index = remaining.indexOf(gram);
+        if (index >= 0) {
+            matches += 1;
+            remaining.splice(index, 1);
+        }
+    }
+    return Math.round((2 * matches / (aGrams.length + grams(b).length)) * 70);
+}
+
+function fullYucDate(dateText, season) {
+    const match = String(dateText || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+    const seasonMatch = /^(\d{4})(01|04|07|10)$/.exec(season || '');
+    if (!match || !seasonMatch) return '';
+    let year = Number(seasonMatch[1]);
+    const seasonMonth = Number(seasonMatch[2]);
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    if (seasonMonth === 1 && month >= 10) year -= 1;
+    if (seasonMonth === 10 && month <= 2) year += 1;
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return '';
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function weekDayFromDate(dateText) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText || '');
+    if (!match) return 0;
+    const day = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
+    return day === 0 ? 7 : day;
+}
+
+function parseStaff(staffHtml) {
+    const wanted = new Map([
+        ['原作', 'originalWork'],
+        ['导演', 'director'],
+        ['副导演', 'assistantDirector'],
+        ['编剧', 'seriesComposition'],
+        ['人物设计', 'characterDesign'],
+        ['动画人设', 'animationCharacterDesign'],
+        ['动画制作', 'animationStudio'],
+        ['制作', 'animationStudio'],
+    ]);
+    const result = {};
+    let currentKey = '';
+    for (const line of htmlLines(staffHtml)) {
+        const labeled = /^([^：:]{1,12})[：:]\s*(.*)$/.exec(line);
+        if (labeled) {
+            currentKey = wanted.get(labeled[1].trim()) || '';
+            if (currentKey && labeled[2].trim()) {
+                if (!result[currentKey] || labeled[1].trim() !== '制作') result[currentKey] = labeled[2].trim();
+            }
+        } else if (currentKey) {
+            result[currentKey] = `${result[currentKey] || ''} ${line}`.trim();
+        }
+    }
+    return result;
+}
+
+function parseYucPage(html, season) {
+    const schedules = [];
+    const schedulePattern = /<div\s+style=["'][^"']*float\s*:\s*left[^"']*["'][^>]*>\s*<div[^>]*class=["'][^"']*div_date[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div>[\s\S]*?<td[^>]*class=["'][^"']*date_title_[^"']*["'][^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/table>/gi;
+    let match;
+    while ((match = schedulePattern.exec(html))) {
+        const dateBlock = match[1];
+        const updateTime = htmlText(classContent(dateBlock, 'imgtext4')).replace(/~.*$/, '').trim();
+        const dateText = htmlText(classContent(dateBlock, 'imgep'));
+        const imageUrl = /<img[^>]+data-src=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
+            || /<a[^>]+href=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
+            || '';
+        const airDate = fullYucDate(dateText, season);
+        schedules.push({
+            title: htmlText(match[2]),
+            imageUrl,
+            dateText,
+            airDate,
+            updateWeekDay: weekDayFromDate(airDate),
+            updateTime: /^(?:[01]?\d|2\d):[0-5]\d$/.test(updateTime) ? updateTime.padStart(5, '0') : '',
+        });
+    }
+
+    const details = [];
+    const detailPattern = /<table[^>]*width=["']500px["'][^>]*>([\s\S]*?)<\/table>/gi;
+    while ((match = detailPattern.exec(html))) {
+        const table = match[1];
+        const titleCn = htmlText(classContent(table, 'title_cn_'));
+        const titleJp = htmlText(classContent(table, 'title_jp_'));
+        if (!titleCn && !titleJp) continue;
+        const prefix = html.slice(Math.max(0, match.index - 1000), match.index);
+        const images = [...prefix.matchAll(/<img[^>]+(?:data-src|src)=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)];
+        details.push({
+            titleCn,
+            titleJp,
+            imageUrl: images.at(-1)?.[1] || '',
+            broadcast: htmlText(classContent(table, 'broadcast_')),
+            staff: parseStaff(classContent(table, 'staff_')),
+        });
+    }
+
+    return details.map(detail => {
+        const schedule = schedules.find(item => item.imageUrl && item.imageUrl === detail.imageUrl)
+            || schedules.map(item => ({ item, score: Math.max(titleScore(item.title, detail.titleCn), titleScore(item.title, detail.titleJp)) }))
+                .sort((a, b) => b.score - a.score)[0]?.item;
+        return { ...detail, schedule: schedule || null };
+    });
+}
+
+function matchYucAnime(records, titles) {
+    const requested = titles.map(value => String(value || '').trim()).filter(Boolean);
+    let best = null;
+    for (const record of records) {
+        const score = Math.max(0, ...requested.flatMap(title => [
+            titleScore(title, record.titleCn),
+            titleScore(title, record.titleJp),
+            titleScore(title, record.schedule?.title),
+        ]));
+        if (!best || score > best.score) best = { score, record };
+    }
+    return best?.score >= 55 ? best.record : null;
+}
+
+function yucSeasonFromDate(value, now = new Date()) {
+    const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value || '');
+    const year = match ? Number(match[1]) : now.getFullYear();
+    const month = match ? Number(match[2]) : now.getMonth() + 1;
+    const seasonMonth = month <= 3 ? 1 : month <= 6 ? 4 : month <= 9 ? 7 : 10;
+    return `${year}${String(seasonMonth).padStart(2, '0')}`;
+}
+
+function downloadYucPage(path, transport = https) {
+    return new Promise((resolve, reject) => {
+        const request = transport.request({
+            hostname: 'yuc.wiki',
+            port: transport === https ? 443 : 80,
+            path,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'AnimaList/1.2.0 (+local anime tracker)',
+                Accept: 'text/html,application/xhtml+xml',
+                'Accept-Encoding': 'identity',
+            },
+        }, upstream => {
+            if (upstream.statusCode !== 200) {
+                upstream.resume();
+                reject(new Error(`Yuc upstream returned ${upstream.statusCode || 502}`));
+                return;
+            }
+            const chunks = [];
+            let size = 0;
+            upstream.on('data', chunk => {
+                size += chunk.length;
+                if (size > MAX_RESPONSE_BYTES) request.destroy(new Error('Yuc response too large'));
+                else chunks.push(chunk);
+            });
+            upstream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        });
+        request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error('Yuc upstream timeout')));
+        request.on('error', reject);
+        request.end();
+    });
+}
+
+async function fetchYucAnime(event, origin) {
+    const params = { ...(event.queryStringParameters || {}), ...(event.queryString || {}) };
+    const titles = [params.title, params.titleCn, params.titleJp]
+        .filter(value => typeof value === 'string' && value.length <= 300);
+    if (titles.length === 0) return response(400, { error: 'Missing title' }, {}, origin);
+    const season = yucSeasonFromDate(params.airDate);
+    const path = `/${season}/`;
+    const respondFromRecords = records => {
+        const result = matchYucAnime(records, titles);
+        return response(200, result ? {
+            source: 'yuc.wiki',
+            season,
+            sourceUrl: `https://yuc.wiki/${season}/`,
+            ...result,
+        } : null, { 'Cache-Control': 'public, max-age=21600' }, origin);
+    };
+    const cached = yucPageCache.get(season);
+    if (cached?.expiresAt > Date.now()) return respondFromRecords(cached.records);
+
+    try {
+        // yuc.wiki 当前 HTTPS 证书已过期，但同一固定主机公开提供 HTTP 200 页面。
+        // 抓取内容只按白名单字段解析为纯文本，从不执行远端脚本或透传 HTML。
+        const html = await downloadYucPage(path, http);
+        const records = parseYucPage(html, season);
+        if (records.length === 0) throw new Error('Yuc page structure was not recognized');
+        yucPageCache.set(season, { records, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+        return respondFromRecords(records);
+    } catch (error) {
+        return response(502, { error: error.message }, {}, origin);
+    }
+}
+
+exports._test = {
+    getAllowedImageUrl,
+    isAllowedRequest,
+    binaryResponse,
+    normalizeYucTitle,
+    parseYucPage,
+    matchYucAnime,
+    yucSeasonFromDate,
+};
+
 exports.main_handler = async event => {
     const path = event.path || '';
     const method = (event.httpMethod || 'GET').toUpperCase();
@@ -122,6 +382,9 @@ exports.main_handler = async event => {
         const imageUrl = getAllowedImageUrl(event);
         if (!imageUrl) return send(400, { error: 'Invalid image URL' });
         return proxyImage(imageUrl, corsOrigin);
+    }
+    if (method === 'GET' && path === '/yuc/anime') {
+        return fetchYucAnime(event, corsOrigin);
     }
     if (!isAllowedRequest(method, path)) return send(404, { error: 'Not found' });
 
@@ -150,7 +413,7 @@ exports.main_handler = async event => {
             path: targetPath,
             method,
             headers: {
-                'User-Agent': 'AnimeTracker/1.1.0',
+                'User-Agent': 'AnimaList/1.2.0',
                 ...(method === 'POST' ? {
                     'Content-Type': 'application/json',
                     'Content-Length': Buffer.byteLength(body),

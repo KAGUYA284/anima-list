@@ -36,3 +36,44 @@ test('binaryResponse 无 Origin 时不下发 CORS 头', () => {
     assert.equal(res.headers['Access-Control-Allow-Origin'], undefined);
     assert.equal(res.headers['X-Encoding'], 'base64');
 });
+
+test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () => {
+    const cover = 'https://i0.hdslb.com/bfs/new_dyn/example.jpg';
+    const html = `
+        <div style="float:left"><div class="div_date">
+            <p class="imgtext4">22:00~</p><p class="imgep">7/2~</p>
+            <a href="${cover}"><img src="${cover}"></a>
+        </div><div><div class="table-container"><table width="120px"><tbody>
+            <tr><td class="date_title_">BanG Dream!<br>YUME∞MITA</td></tr>
+        </tbody></table></div></div></div>
+        <a href="${cover}"><img src="${cover}"></a>
+        <div class="table-container"><table width="500px"><tbody><tr>
+            <td class="title_main_r"><p class="title_cn_r1">BanG Dream! YUME∞MITA</p>
+            <p class="title_jp_r">バンドリ！ ゆめ∞みた</p></td></tr><tr>
+            <td class="staff_r2">原作：Bushiroad<br>导演：梅津朋美<br>副导演：森田纮吏<br>
+            编剧：后藤绿<br>人物设计：信泽収&amp;mochipuyo<br>
+            动画人设：茶之原拓也&amp;八森优香<br>动画制作：NICHICALINE</td>
+            <td><p class="broadcast_r">7/2周四深夜</p></td>
+        </tr></tbody></table></div>`;
+
+    const records = _test.parseYucPage(html, '202607');
+    assert.equal(records.length, 1);
+    assert.equal(records[0].schedule.airDate, '2026-07-02');
+    assert.equal(records[0].schedule.updateWeekDay, 4);
+    assert.equal(records[0].schedule.updateTime, '22:00');
+    assert.deepEqual(records[0].staff, {
+        originalWork: 'Bushiroad',
+        director: '梅津朋美',
+        assistantDirector: '森田纮吏',
+        seriesComposition: '后藤绿',
+        characterDesign: '信泽収&mochipuyo',
+        animationCharacterDesign: '茶之原拓也&八森优香',
+        animationStudio: 'NICHICALINE',
+    });
+    assert.equal(_test.matchYucAnime(records, ['バンドリ！ ゆめ∞みた']), records[0]);
+});
+
+test('Yuc 季度路径由首播日期确定', () => {
+    assert.equal(_test.yucSeasonFromDate('2026-08-05'), '202607');
+    assert.equal(_test.yucSeasonFromDate('2026-01-03'), '202601');
+});

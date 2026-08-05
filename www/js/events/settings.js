@@ -42,6 +42,20 @@ export function attachSettingsEvents() {
         });
     });
 
+    document.querySelectorAll('.toggle-btn[data-update-source]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const updateSource = btn.dataset.updateSource;
+            if (updateSource !== state.settings.updateSource) updateSettings({ updateSource });
+        });
+    });
+
+    document.querySelectorAll('.toggle-btn[data-anime-details]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const showAnimeDetails = btn.dataset.animeDetails === 'true';
+            if (showAnimeDetails !== state.settings.showAnimeDetails) updateSettings({ showAnimeDetails });
+        });
+    });
+
     // 导出按钮
     const settingsExportBtn = document.getElementById('settingsExportBtn');
     const exportFilterModal = document.getElementById('exportFilterModal');

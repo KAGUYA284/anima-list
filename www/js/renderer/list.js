@@ -193,7 +193,7 @@ function renderAnimeCard(anime) {
                     <div class="card-title">${escHtml(anime.title)}</div>
                     <div class="card-meta">
                         <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
-                        ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}</span>` : ''}
+                        ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}</span>` : ''}
                     </div>
                     <div class="card-progress-cover">
                         <span class="progress-text">${anime.currentEpisode}/${anime.totalEpisodes}</span>
@@ -216,7 +216,7 @@ function renderAnimeCard(anime) {
                 </div>
                 <div class="card-meta">
                     <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
-                    ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}</span>` : ''}
+                    ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}</span>` : ''}
                     <div class="card-stars">
                         ${renderStars(anime.rating)}
                     </div>
