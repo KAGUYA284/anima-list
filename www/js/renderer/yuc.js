@@ -34,7 +34,6 @@ export function renderYucPage() {
                     </label>
                 </div>
             </div>
-            <p class="yuc-season-source">数据来源：yuc.wiki · 优先端侧抓取，失败时使用云函数</p>
             <div id="yucSeasonStatus" class="bgm-loading">正在加载季度新番表...</div>
             <div id="yucSeasonList" class="yuc-season-list"></div>
         </main>
@@ -42,7 +41,9 @@ export function renderYucPage() {
 }
 
 export function renderYucRecords(records, existingTitles = new Set()) {
-    const indexed = records.map((record, index) => ({ record, index }));
+    const indexed = records
+        .map((record, index) => ({ record, index }))
+        .filter(({ record }) => record.titleCn || record.title || record.titleJp);
     const sections = WEEK_DAYS.slice(1).map((label, index) => ({
         label,
         weekday: index + 1,
@@ -66,7 +67,7 @@ export function renderYucRecords(records, existingTitles = new Set()) {
 
 function renderYucRecord(record, index, existingTitles) {
         const schedule = record.schedule || {};
-        const title = record.titleCn || record.title || record.titleJp || `未命名番剧 ${index + 1}`;
+        const title = record.titleCn || record.title || record.titleJp;
         const key = String(title).normalize('NFKC').replace(/[\p{P}\p{S}\s]/gu, '').toLocaleLowerCase('zh-CN');
         const exists = existingTitles.has(key);
         const date = schedule.airDate || '日期待定';

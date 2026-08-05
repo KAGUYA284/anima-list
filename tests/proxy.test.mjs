@@ -38,14 +38,14 @@ test('binaryResponse 无 Origin 时不下发 CORS 头', () => {
 });
 
 test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () => {
-    const cover = 'https://i0.hdslb.com/bfs/new_dyn/example.jpg';
+    const cover = 'http://i0.hdslb.com/bfs/new_dyn/example.jpg';
     const html = `
         <div><table class="date_"><tr><td class="date2">周四 (木)</td></tr></table></div>
         <div style="float:left"><div class="div_date">
             <p class="imgtext4">22:00~</p><p class="imgep">7/2~</p>
             <a href="${cover}"><img src="${cover}"></a>
         </div><div><div class="table-container"><table width="120px"><tbody>
-            <tr><td class="date_title_">BanG Dream!<br>YUME∞MITA</td></tr>
+            <tr><td class="date_title1">BanG Dream!<br>YUME∞MITA</td></tr>
         </tbody></table></div></div></div>
         <a href="${cover}"><img src="${cover}"></a>
         <div class="table-container"><table width="500px"><tbody><tr>
@@ -59,6 +59,8 @@ test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () =
 
     const records = _test.parseYucPage(html, '202607');
     assert.equal(records.length, 1);
+    assert.equal(records[0].title, 'BanG Dream! YUME∞MITA');
+    assert.equal(records[0].imageUrl, 'https://i0.hdslb.com/bfs/new_dyn/example.jpg');
     assert.equal(records[0].schedule.airDate, '2026-07-02');
     assert.equal(records[0].schedule.updateWeekDay, 4);
     assert.equal(records[0].schedule.updateTime, '22:00');
@@ -94,7 +96,7 @@ test('Yuc 连续播出条目继承页面星期分组', () => {
         <div style="float:left"><div class="div_date">
             <p class="imgtext5">23:30~</p><p class="imgep">(全24话)</p>
             <img data-src="https://i0.hdslb.com/ongoing.jpg">
-        </div><div><table><tr><td class="date_title_">连续播出作品</td></tr></table></div></div>`;
+        </div><div><table><tr><td class="date_title">连续播出作品</td></tr></table></div></div>`;
     const records = _test.parseYucPage(html, '202607');
     assert.equal(records.length, 1);
     assert.equal(records[0].schedule.airDate, '');

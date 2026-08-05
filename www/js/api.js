@@ -301,15 +301,20 @@ export function selectBangumiMatch(subjects, { title = '', titleCn = '', titleJp
 export async function searchBangumiForYuc(record, { signal } = {}) {
     const title = record?.titleCn || record?.title || record?.titleJp || '';
     const titleJp = record?.titleJp || '';
-    const keyword = titleJp || title;
-    if (!keyword) return null;
-    const subjects = await searchBangumiAt(keyword, { signal, endpoint: 'proxy1' });
-    return selectBangumiMatch(subjects, {
-        title,
-        titleCn: record?.titleCn,
-        titleJp,
-        airDate: record?.schedule?.airDate,
-    });
+    const keywords = [titleJp, record?.titleCn, record?.title]
+        .map(value => String(value || '').trim())
+        .filter((value, index, values) => value && values.indexOf(value) === index);
+    for (const keyword of keywords) {
+        const subjects = await searchBangumiAt(keyword, { signal, endpoint: 'proxy1' });
+        const matched = selectBangumiMatch(subjects, {
+            title,
+            titleCn: record?.titleCn,
+            titleJp,
+            airDate: record?.schedule?.airDate,
+        });
+        if (matched) return matched;
+    }
+    return null;
 }
 
 export function getBangumiSubject(id) {

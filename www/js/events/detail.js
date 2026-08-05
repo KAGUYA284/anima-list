@@ -90,7 +90,7 @@ async function loadYucDetailInto(anime) {
         container.innerHTML = '';
         return;
     }
-    container.innerHTML = '<div class="bgm-loading">正在匹配长门有希制作信息...</div>';
+    container.innerHTML = '<div class="bgm-loading">正在匹配制作信息...</div>';
 
     let subject = null;
     if (anime.bgmId) {
@@ -121,11 +121,9 @@ async function loadYucDetailInto(anime) {
         return;
     }
 
-    const sourceUrl = /^https:\/\/yuc\.wiki\/\d{6}\/$/.test(yuc.sourceUrl || '') ? yuc.sourceUrl : 'https://yuc.wiki/';
     container.innerHTML = `
         <div class="yuc-detail-header">
             <h2 class="detail-section-title">制作信息</h2>
-            <a href="${escHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">来源：长门有希</a>
         </div>
         <div class="yuc-staff-grid">
             ${fields.map(([label, value]) => `

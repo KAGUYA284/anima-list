@@ -32,7 +32,7 @@ export function attachFormEvents(anime) {
         const weekday = Number(formUpdateWeekDay.value) || 0;
         const time = formUpdateTime?.value.trim() || '';
         const period = updatePeriodFromTime(time);
-        const sourceLabel = source === 'yuc' ? '长门有希' : source === 'date' ? '已根据放送日期推断' : '当前设置';
+        const sourceLabel = source === 'yuc' ? 'yuc.wiki' : source === 'date' ? '已根据放送日期推断' : '当前设置';
         chasingWeekdayInfo.textContent = weekday
             ? `${sourceLabel}：${WEEK_DAYS[weekday]}${time ? ` ${time}${period ? `（${period}）` : ''}` : ''}更新`
             : '选择实际的每周更新时间';
@@ -345,7 +345,7 @@ export function attachFormEvents(anime) {
                         }
 
                         let yucMatched = false;
-                        if ((formData.type || 'chasing') === 'chasing' && state.settings.updateSource === 'yuc') {
+                        if ((formData.type || 'chasing') === 'chasing') {
                             try {
                                 const yuc = await getYucAnime({
                                     title: detail.name_cn || detail.name,
@@ -374,7 +374,7 @@ export function attachFormEvents(anime) {
 
                         bgmResults.style.display = 'none';
                         lastKeyword = detail.name_cn || detail.name || '';
-                        showToast(yucMatched ? '已从长门有希填写播出日期和具体时间' : '已自动填写番剧信息');
+                        showToast(yucMatched ? '已从 yuc.wiki 填写播出日期和具体时间' : '已自动填写番剧信息');
                     } catch (e) {
                         item.innerHTML = '<div class="bgm-loading" style="color:#f87171;">加载失败</div>';
                     }

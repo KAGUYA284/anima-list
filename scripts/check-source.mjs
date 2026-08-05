@@ -69,11 +69,11 @@ if (!proxySource.includes("path === '/yuc/anime'") || !proxySource.includes("hos
 if (!proxySource.includes("path === '/yuc/season'") || !proxySource.includes('updatePeriodFromBroadcast')) {
     throw new Error('SCF 代理缺少季度新番表路由或播出时段映射');
 }
-if (!webSource.includes("updateSource: 'yuc'") || !webSource.includes('showAnimeDetails: true')) {
-    throw new Error('设置缺少长门有希更新时间来源或番剧具体信息开关');
+if (!webSource.includes("listStyle: 'cover'") || !webSource.includes('showAnimeDetails: true')) {
+    throw new Error('设置缺少默认封面模式或番剧具体信息开关');
 }
-if (!webSource.includes('1. 长门有希') || !webSource.includes('2. bangumi')) {
-    throw new Error('更新时间来源选项名称不符合产品约定');
+if (webSource.includes('data-update-source') || webSource.includes('更新时间来源')) {
+    throw new Error('设置中仍存在已移除的更新时间来源选项');
 }
 if (!webSource.includes('getYucAnime') || !webSource.includes('formUpdateTime')) {
     throw new Error('前端缺少长门有希信息查询或具体更新时间字段');

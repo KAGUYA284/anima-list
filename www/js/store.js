@@ -3,12 +3,13 @@ import { loadFromStorage, loadSettings, saveSettings, saveToStorage } from './st
 import { generateId } from './utils.js';
 
 export const DEFAULT_SETTINGS = {
-    listStyle: 'text',
+    listStyle: 'cover',
     darkMode: false,
     apiEndpoint: 'direct',
-    updateSource: 'yuc',
     showAnimeDetails: true,
 };
+
+const { updateSource: _legacyUpdateSource, ...storedSettings } = loadSettings();
 
 let renderCallback = () => {};
 
@@ -42,7 +43,7 @@ export let state = {
     currentPage: 'list',
     currentAnimeId: null,
     yucSeason: '',
-    settings: { ...DEFAULT_SETTINGS, ...loadSettings() },
+    settings: { ...DEFAULT_SETTINGS, ...storedSettings },
 };
 
 export function setRenderer(callback) {

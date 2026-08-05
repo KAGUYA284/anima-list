@@ -10,7 +10,6 @@ export function renderSettingsPage() {
     const currentStyle = state.settings.listStyle;
     const isDark = state.settings.darkMode;
     const apiEndpoint = state.settings.apiEndpoint;
-    const updateSource = state.settings.updateSource;
     const showAnimeDetails = state.settings.showAnimeDetails;
     return `
         <header class="header">
@@ -71,17 +70,6 @@ export function renderSettingsPage() {
 
             <div class="settings-section">
                 <h2 class="settings-section-title">番剧信息</h2>
-                <div class="settings-row">
-                    <span class="settings-label">更新时间来源</span>
-                    <div class="settings-toggle">
-                        <button class="toggle-btn ${updateSource === 'yuc' ? 'active' : ''}" data-update-source="yuc">
-                            1. 长门有希
-                        </button>
-                        <button class="toggle-btn ${updateSource === 'bangumi' ? 'active' : ''}" data-update-source="bangumi">
-                            2. bangumi
-                        </button>
-                    </div>
-                </div>
                 <div class="settings-row">
                     <span class="settings-label">显示番剧具体信息</span>
                     <div class="settings-toggle">

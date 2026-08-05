@@ -42,13 +42,6 @@ export function attachSettingsEvents() {
         });
     });
 
-    document.querySelectorAll('.toggle-btn[data-update-source]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const updateSource = btn.dataset.updateSource;
-            if (updateSource !== state.settings.updateSource) updateSettings({ updateSource });
-        });
-    });
-
     document.querySelectorAll('.toggle-btn[data-anime-details]').forEach(btn => {
         btn.addEventListener('click', () => {
             const showAnimeDetails = btn.dataset.animeDetails === 'true';

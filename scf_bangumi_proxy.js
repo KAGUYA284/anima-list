@@ -254,7 +254,7 @@ function parseYucPage(html, season) {
         const weekDay = [...weekDayMap].find(([name]) => label.includes(name))?.[1] || 0;
         if (weekDay) weekDayMarkers.push({ index: weekDayMatch.index, weekDay });
     }
-    const schedulePattern = /<div\s+style=["'][^"']*float\s*:\s*left[^"']*["'][^>]*>\s*<div[^>]*class=["'][^"']*div_date[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div>[\s\S]*?<td[^>]*class=["'][^"']*date_title_[^"']*["'][^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/table>/gi;
+    const schedulePattern = /<div\s+style=["'][^"']*float\s*:\s*left[^"']*["'][^>]*>\s*<div[^>]*class=["'][^"']*div_date[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div>[\s\S]*?<td[^>]*class=["'][^"']*date_title[^"']*["'][^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/table>/gi;
     let match;
     let markerIndex = 0;
     let sectionWeekDay = 0;
@@ -266,9 +266,10 @@ function parseYucPage(html, season) {
         const dateBlock = match[1];
         const updateTime = htmlText(classContent(dateBlock, 'imgtext4') || classContent(dateBlock, 'imgtext5')).replace(/~.*$/, '').trim();
         const dateText = htmlText(classContent(dateBlock, 'imgep'));
-        const imageUrl = /<img[^>]+data-src=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
-            || /<a[^>]+href=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
+        const rawImageUrl = /<img[^>]+data-src=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
+            || /<a[^>]+href=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
             || '';
+        const imageUrl = rawImageUrl.replace(/^http:/i, 'https:');
         const airDate = fullYucDate(dateText, season);
         schedules.push({
             title: htmlText(match[2]),
@@ -289,11 +290,11 @@ function parseYucPage(html, season) {
         const titleJp = htmlText(classContent(table, 'title_jp_'));
         if (!titleCn && !titleJp) continue;
         const prefix = html.slice(Math.max(0, match.index - 1000), match.index);
-        const images = [...prefix.matchAll(/<img[^>]+(?:data-src|src)=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)];
+        const images = [...prefix.matchAll(/<img[^>]+(?:data-src|src)=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)];
         details.push({
             titleCn,
             titleJp,
-            imageUrl: images.at(-1)?.[1] || '',
+            imageUrl: (images.at(-1)?.[1] || '').replace(/^http:/i, 'https:'),
             broadcast: htmlText(classContent(table, 'broadcast_')),
             staff: parseStaff(classContent(table, 'staff_')),
         });
@@ -319,7 +320,7 @@ function parseYucPage(html, season) {
             staff: detail?.staff || {},
             schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '' },
         };
-    });
+    }).filter(record => record.title || record.titleCn || record.titleJp);
 }
 
 function matchYucAnime(records, titles) {

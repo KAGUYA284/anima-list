@@ -8,7 +8,8 @@ globalThis.localStorage = {
 };
 
 const {
-    apiFetch, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl, selectBangumiMatch,
+    apiFetch, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl,
+    searchBangumiForYuc, selectBangumiMatch,
 } = await import('../www/js/api.js');
 
 test('Bangumi images use the image proxy only in proxy mode', () => {
@@ -89,4 +90,24 @@ test('Yuc records select the matching Bangumi subject by title and air date', ()
         airDate: '2026-07-06',
     });
     assert.equal(matched.id, 20);
+});
+
+test('Yuc additions search Bangumi by Japanese title before Chinese fallback', async () => {
+    const keywords = [];
+    globalThis.fetch = async (_url, options) => {
+        const keyword = JSON.parse(options.body).keyword;
+        keywords.push(keyword);
+        const data = keyword === '対象作品'
+            ? [{ id: 1, type: 2, name: '別作品', name_cn: '其他作品', date: '2026-07-01' }]
+            : [{ id: 2, type: 2, name: '対象作品', name_cn: '目标作品', date: '2026-07-02' }];
+        return new Response(JSON.stringify({ data }), { status: 200 });
+    };
+    const matched = await searchBangumiForYuc({
+        title: '目标作品',
+        titleCn: '目标作品',
+        titleJp: '対象作品',
+        schedule: { airDate: '2026-07-02' },
+    });
+    assert.deepEqual(keywords, ['対象作品', '目标作品']);
+    assert.equal(matched.id, 2);
 });

@@ -1313,12 +1313,6 @@ input[type="date"] {
 .yuc-season-filters select {
     width: 9.5rem;
 }
-.yuc-season-source {
-    margin: 0 0 1rem;
-    color: #9ca3af;
-    font-size: 0.75rem;
-    text-align: center;
-}
 .yuc-season-list {
     display: grid;
     gap: 1.25rem;

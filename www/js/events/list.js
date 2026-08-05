@@ -14,7 +14,7 @@ let lastYucScheduleSync = 0;
 let yucScheduleSyncPromise = null;
 
 async function syncYucSchedules() {
-    if (state.settings.updateSource !== 'yuc' || Date.now() - lastYucScheduleSync < 6 * 60 * 60 * 1000) return;
+    if (Date.now() - lastYucScheduleSync < 6 * 60 * 60 * 1000) return;
     if (yucScheduleSyncPromise) return yucScheduleSyncPromise;
     lastYucScheduleSync = Date.now();
     const candidates = state.animeList.filter(anime => anime.type === 'chasing' && anime.title);

@@ -28,6 +28,12 @@ export function yucSeasonLabel(season) {
     return `${season.slice(0, 4)}年${labels[Number(season.slice(4))] || '新番'}`;
 }
 
+export function yucSeasonStartDate(season) {
+    return SEASON_PATTERN.test(String(season || ''))
+        ? `${String(season).slice(0, 4)}-${String(season).slice(4)}-01`
+        : '';
+}
+
 export function hasYucSeasonData(value) {
     const season = SEASON_PATTERN.test(String(value || ''))
         ? String(value)
@@ -121,7 +127,15 @@ function weekDayFromDate(value) {
 }
 
 function imageOf(element) {
-    return element?.getAttribute('data-src') || element?.getAttribute('src') || '';
+    const value = element?.getAttribute('data-src') || element?.getAttribute('src') || '';
+    try {
+        const url = new URL(value, 'https://yuc.wiki/');
+        if (!['http:', 'https:'].includes(url.protocol)) return '';
+        url.protocol = 'https:';
+        return url.href;
+    } catch {
+        return '';
+    }
 }
 
 function parseStaff(element) {
@@ -169,7 +183,7 @@ export function parseYucHtml(html, season) {
         const dateText = textOf(block.querySelector('.imgep'));
         const updateTime = textOf(block.querySelector('.imgtext4, .imgtext5')).replace(/~.*$/, '').trim();
         const airDate = fullYucDate(dateText, season);
-        const title = textOf(root?.querySelector('.date_title_, .date_title__'));
+        const title = textOf(root?.querySelector('[class^="date_title"]'));
         schedules.push({
             title,
             imageUrl: imageOf(block.querySelector('img')),
@@ -205,7 +219,7 @@ export function parseYucHtml(html, season) {
             staff: detail?.staff || {},
             schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '' },
         };
-    });
+    }).filter(record => record.title || record.titleCn || record.titleJp);
 }
 
 async function fetchText(url, timeoutMs = 15000) {

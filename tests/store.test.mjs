@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    addAnime, getAnimeById, getCurrentAnime, setRenderer, setState, state, updateAnime,
+    addAnime, DEFAULT_SETTINGS, getAnimeById, getCurrentAnime, setRenderer, setState, state, updateAnime,
 } from '../www/js/store.js';
+
+test('fresh settings default to cover mode and do not expose an update source', () => {
+    assert.equal(DEFAULT_SETTINGS.listStyle, 'cover');
+    assert.equal(Object.hasOwn(DEFAULT_SETTINGS, 'updateSource'), false);
+});
 
 test('the detail selection is derived from currentAnimeId and each update renders once', () => {
     let renderCount = 0;

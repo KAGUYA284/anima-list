@@ -1,5 +1,5 @@
 import { getYucSeasonList, searchBangumiForYuc } from '../api.js';
-import { YUC_MIN_SEASON, yucSeasonFromDate, yucSeasonLabel } from '../yuc.js';
+import { YUC_MIN_SEASON, yucSeasonFromDate, yucSeasonLabel, yucSeasonStartDate } from '../yuc.js';
 import { addAnime, setState, state } from '../store.js';
 import { escHtml, showToast } from '../utils.js';
 import { renderYucRecords } from '../renderer/yuc.js';
@@ -68,7 +68,7 @@ export function attachYucEvents() {
                     currentEpisode: 0,
                     status: 'want',
                     type: 'chasing',
-                    airDate: schedule.airDate || '',
+                    airDate: schedule.airDate || bangumi?.date || yucSeasonStartDate(season),
                     updateWeekDay: schedule.updateWeekDay || '',
                     updateTime: schedule.updateTime || '',
                     updatePeriod: schedule.updatePeriod || '',
