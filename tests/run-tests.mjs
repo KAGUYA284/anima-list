@@ -6,3 +6,4 @@ import './utils.test.mjs';
 import './proxy.test.mjs';
 import './yuc.test.mjs';
 import './grouping.test.mjs';
+import './list-order.test.mjs';

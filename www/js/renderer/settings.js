@@ -11,6 +11,7 @@ export function renderSettingsPage() {
     const isDark = state.settings.darkMode;
     const apiEndpoint = state.settings.apiEndpoint;
     const showAnimeDetails = state.settings.showAnimeDetails;
+    const listOrder = state.settings.listOrder;
     return `
         <header class="header">
             <div class="header-content">
@@ -79,6 +80,20 @@ export function renderSettingsPage() {
                         <button class="toggle-btn ${!showAnimeDetails ? 'active' : ''}" data-anime-details="false">
                             关闭
                         </button>
+                    </div>
+                </div>
+                <div class="settings-row settings-row-wrap">
+                    <span class="settings-label settings-label-with-help">
+                        展示次序
+                        <button class="settings-info-button" id="listOrderInfoBtn" type="button" aria-expanded="false" aria-controls="listOrderHelp" title="查看排序方法">i</button>
+                    </span>
+                    <div class="settings-toggle">
+                        <button class="toggle-btn ${listOrder === 'update' ? 'active' : ''}" data-list-order="update">更新次序</button>
+                        <button class="toggle-btn ${listOrder !== 'update' ? 'active' : ''}" data-list-order="time">时间次序</button>
+                    </div>
+                    <div class="settings-order-help" id="listOrderHelp" hidden>
+                        <strong>更新次序：</strong>从今天开始按星期轮转；同一天依次为上午、下午、晚间、深夜，同一时段按具体更新时间由早到晚。<br>
+                        <strong>时间次序：</strong>保持原有周一至周日的固定顺序。
                     </div>
                 </div>
             </div>

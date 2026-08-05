@@ -59,7 +59,7 @@ export function attachDetailEvents() {
     });
 
     // ======== Bangumi 详情加载 ========
-    if (anime.bgmId) {
+    if (state.settings.showAnimeDetails && anime.bgmId) {
         loadBangumiDetailInto(anime.bgmId).catch(e => {
             console.error('[Detail] Bangumi 详情加载失败:', e);
             const container = document.getElementById('bangumiDetail');

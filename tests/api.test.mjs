@@ -11,6 +11,7 @@ const {
     apiFetch, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl,
     searchBangumiForYuc, selectBangumiMatch,
 } = await import('../www/js/api.js');
+const { fillMissingAnimeFields } = await import('../www/js/import-enrichment.js');
 
 test('Bangumi images use the image proxy only in proxy mode', () => {
     const image = 'https://lain.bgm.tv/r/800/pic/cover/l/example.jpg';
@@ -110,4 +111,26 @@ test('Yuc additions search Bangumi by Japanese title before Chinese fallback', a
     });
     assert.deepEqual(keywords, ['対象作品', '目标作品']);
     assert.equal(matched.id, 2);
+});
+
+test('import enrichment fills missing fields without overwriting local values', () => {
+    const enriched = fillMissingAnimeFields({
+        title: '导入作品',
+        totalEpisodes: 1,
+        currentEpisode: 0,
+        type: 'chasing',
+        airDate: '',
+        updateWeekDay: 5,
+        updateTime: '',
+        updatePeriod: '',
+    }, {
+        subject: { id: 42, total_episodes: 12, date: '2026-07-03' },
+        yuc: { schedule: { airDate: '2026-07-04', updateWeekDay: 6, updateTime: '22:30', updatePeriod: '晚间' } },
+    });
+    assert.equal(enriched.bgmId, '42');
+    assert.equal(enriched.totalEpisodes, 12);
+    assert.equal(enriched.airDate, '2026-07-04');
+    assert.equal(enriched.updateWeekDay, 5);
+    assert.equal(enriched.updateTime, '22:30');
+    assert.equal(enriched.updatePeriod, '晚间');
 });

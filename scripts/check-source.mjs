@@ -72,6 +72,15 @@ if (!proxySource.includes("path === '/yuc/season'") || !proxySource.includes('up
 if (!webSource.includes("listStyle: 'cover'") || !webSource.includes('showAnimeDetails: true')) {
     throw new Error('设置缺少默认封面模式或番剧具体信息开关');
 }
+if (!webSource.includes("listOrder: 'time'") || !webSource.includes('data-list-order') || !webSource.includes('compareChasingForDisplay')) {
+    throw new Error('设置缺少列表展示次序或列表未接入排序逻辑');
+}
+if (!webSource.includes('enrichImportedAnimeList') || !webSource.includes('导入番剧信息补全完成并已保存')) {
+    throw new Error('JSON 导入缺少 Bangumi/yuc 信息补全与本地保存流程');
+}
+if (!webSource.includes('state.settings.showAnimeDetails && anime.bgmId')) {
+    throw new Error('关闭具体信息后仍可能加载角色与声优信息');
+}
 if (webSource.includes('data-update-source') || webSource.includes('更新时间来源')) {
     throw new Error('设置中仍存在已移除的更新时间来源选项');
 }

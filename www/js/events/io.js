@@ -10,6 +10,7 @@ import { createBackup, readBackup } from '../data.js';
 import { replaceAnimeList, state } from '../store.js';
 import { showToast } from '../utils.js';
 import { buildFilteredData, buildGroups, mergeImport } from '../grouping.js';
+import { enrichImportedAnimeList, fillMissingAnimeFields } from '../import-enrichment.js';
 
 /** 构建导出筛选弹窗内容 */
 export function buildExportFilter() {
@@ -47,8 +48,6 @@ function doExportText(selected) {
     const resultTextarea = document.getElementById('exportResultTextarea');
     if (resultModal && resultTextarea) {
         resultTextarea.value = json;
-        resultTextarea.style.height = 'auto';
-        resultTextarea.style.height = Math.min(resultTextarea.scrollHeight, window.innerHeight * 0.6) + 'px';
         resultModal.style.display = 'block';
     }
 }
@@ -121,6 +120,23 @@ async function doExportFile(selected) {
 }
 
 /** 执行导入合并（以番剧名称为合并键） */
+async function completeImportedMetadata(importedRecords) {
+    const enriched = await enrichImportedAnimeList(importedRecords);
+    const enrichedById = new Map(enriched.map(record => [record.id, record]));
+    const latest = state.animeList.map(record => {
+        const candidate = enrichedById.get(record.id);
+        return candidate ? fillMissingAnimeFields(record, {
+            subject: {
+                id: candidate.bgmId,
+                total_episodes: candidate.totalEpisodes,
+                date: candidate.airDate,
+            },
+            yuc: { schedule: candidate },
+        }) : record;
+    });
+    if (replaceAnimeList(latest)) showToast('导入番剧信息补全完成并已保存');
+}
+
 function doImportJson(imported) {
     let parsed;
     try {
@@ -133,7 +149,13 @@ function doImportJson(imported) {
     const rejected = parsed.errors.length ? `\n忽略无效记录：${parsed.errors.length} 条` : '';
     const msg = `本地：${localCount} 条\n导入数据：${importedCount} 条${rejected}\n合并后：${merged.length} 条\n\n相同 Bangumi 条目或标准化名称将被新数据覆盖，确认导入？`;
     if (!confirm(msg)) return;
-    if (replaceAnimeList(merged)) setTimeout(() => showToast('导入成功'), 100);
+    if (replaceAnimeList(merged)) {
+        setTimeout(() => showToast('导入成功，正在补全缺失信息...'), 100);
+        completeImportedMetadata(parsed.records).catch(error => {
+            console.error('[Import] 补全任务失败', error);
+            showToast('导入已保存，部分信息暂时无法补全');
+        });
+    }
 }
 
 /**

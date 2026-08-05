@@ -799,6 +799,15 @@ input[type="date"] {
 .paste-textarea[readonly]:focus {
     border-color: #e5e7eb;
 }
+.export-result-dialog {
+    max-width: 800px;
+}
+.export-result-textarea {
+    height: min(60vh, 32rem);
+    min-height: 18rem;
+    white-space: pre;
+    overflow: auto;
+}
 .paste-modal-actions {
     display: flex;
     gap: 0.5rem;
@@ -1946,6 +1955,46 @@ body.dark-mode {
 }
 .dark-mode .bgm-studio .info-label {
     color: #6b7280;
+}
+.settings-row-wrap {
+    flex-wrap: wrap;
+}
+.settings-label-with-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+.settings-info-button {
+    display: inline-grid;
+    place-items: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    padding: 0;
+    border: 1px solid #9ca3af;
+    border-radius: 50%;
+    background: transparent;
+    color: #6b7280;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.settings-order-help {
+    flex-basis: 100%;
+    margin-top: 0.625rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: #f8f9fb;
+    color: #6b7280;
+    font-size: 0.75rem;
+    line-height: 1.65;
+}
+.dark-mode .settings-order-help {
+    background: #252540;
+    color: #a0aec0;
+}
+.dark-mode .settings-info-button {
+    border-color: #6b7280;
+    color: #a0aec0;
 }
 .dark-mode .yuc-staff-row {
     color: #d1d5db;

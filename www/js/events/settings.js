@@ -42,6 +42,19 @@ export function attachSettingsEvents() {
         });
     });
 
+    document.querySelectorAll('.toggle-btn[data-list-order]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const listOrder = btn.dataset.listOrder === 'update' ? 'update' : 'time';
+            if (listOrder !== state.settings.listOrder) updateSettings({ listOrder });
+        });
+    });
+    document.getElementById('listOrderInfoBtn')?.addEventListener('click', event => {
+        const help = document.getElementById('listOrderHelp');
+        if (!help) return;
+        help.hidden = !help.hidden;
+        event.currentTarget.setAttribute('aria-expanded', String(!help.hidden));
+    });
+
     document.querySelectorAll('.toggle-btn[data-anime-details]').forEach(btn => {
         btn.addEventListener('click', () => {
             const showAnimeDetails = btn.dataset.animeDetails === 'true';

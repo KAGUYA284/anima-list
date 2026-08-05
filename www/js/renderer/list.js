@@ -9,6 +9,7 @@ import { getFilteredAnime, state } from '../store.js';
 import { loadCollapsed } from '../storage.js';
 import { escHtml, renderStars, safeImageUrl } from '../utils.js';
 import { hasYucSeasonData } from '../yuc.js';
+import { compareChasingForDisplay } from '../list-order.js';
 
 /** 渲染列表页 */
 export function renderListPage() {
@@ -99,6 +100,7 @@ function renderEmptyState() {
 /** 渲染番剧列表（按年/季分组） */
 function renderAnimeList(animeList) {
     const groups = buildGroups(animeList);
+    const sortNow = new Date();
 
     const years = Object.keys(groups).sort((a, b) => {
         if (a === '未分类') return 1;
@@ -137,14 +139,7 @@ function renderAnimeList(animeList) {
                 if (anime.type === 'binge') binge.push(anime);
                 else chasing.push(anime);
             });
-            chasing.sort((a, b) => {
-                const wa = a.updateWeekDay || 0;
-                const wb = b.updateWeekDay || 0;
-                if (wa === wb) return a.title.localeCompare(b.title, 'zh');
-                if (wa === 0) return 1;
-                if (wb === 0) return -1;
-                return wa - wb;
-            });
+            chasing.sort((a, b) => compareChasingForDisplay(a, b, state.settings.listOrder, sortNow));
             binge.sort((a, b) => {
                 const dateA = a.startDate || '';
                 const dateB = b.startDate || '';

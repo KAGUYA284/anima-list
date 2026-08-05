@@ -6,6 +6,7 @@ import {
 
 test('fresh settings default to cover mode and do not expose an update source', () => {
     assert.equal(DEFAULT_SETTINGS.listStyle, 'cover');
+    assert.equal(DEFAULT_SETTINGS.listOrder, 'time');
     assert.equal(Object.hasOwn(DEFAULT_SETTINGS, 'updateSource'), false);
 });
 

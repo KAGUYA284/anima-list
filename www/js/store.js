@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS = {
     darkMode: false,
     apiEndpoint: 'direct',
     showAnimeDetails: true,
+    listOrder: 'time',
 };
 
 const { updateSource: _legacyUpdateSource, ...storedSettings } = loadSettings();

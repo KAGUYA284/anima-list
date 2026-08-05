@@ -49,8 +49,10 @@ export function renderDetailPage() {
             </div>
 
             <!-- Bangumi 详情区域（通过 JS 异步加载） -->
-            <div id="bangumiDetail" class="detail-section"></div>
-            ${state.settings.showAnimeDetails ? '<div id="yucDetail" class="detail-section"></div>' : ''}
+            ${state.settings.showAnimeDetails ? `
+                <div id="bangumiDetail" class="detail-section"></div>
+                <div id="yucDetail" class="detail-section"></div>
+            ` : ''}
 
             <div class="detail-section">
                 <h2 class="detail-section-title">基本信息</h2>
