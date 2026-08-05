@@ -61,6 +61,7 @@ test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () =
     assert.equal(records[0].schedule.airDate, '2026-07-02');
     assert.equal(records[0].schedule.updateWeekDay, 4);
     assert.equal(records[0].schedule.updateTime, '22:00');
+    assert.equal(records[0].schedule.updatePeriod, '深夜');
     assert.deepEqual(records[0].staff, {
         originalWork: 'Bushiroad',
         director: '梅津朋美',
@@ -76,4 +77,12 @@ test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () =
 test('Yuc 季度路径由首播日期确定', () => {
     assert.equal(_test.yucSeasonFromDate('2026-08-05'), '202607');
     assert.equal(_test.yucSeasonFromDate('2026-01-03'), '202601');
+});
+
+test('Yuc 播出时间可以映射到具体时段', () => {
+    assert.equal(_test.updatePeriodFromTime('04:30'), '深夜');
+    assert.equal(_test.updatePeriodFromTime('09:00'), '上午');
+    assert.equal(_test.updatePeriodFromTime('15:00'), '下午');
+    assert.equal(_test.updatePeriodFromTime('22:00'), '晚间');
+    assert.equal(_test.updatePeriodFromBroadcast('7/2周四深夜'), '深夜');
 });

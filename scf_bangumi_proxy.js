@@ -194,6 +194,25 @@ function weekDayFromDate(dateText) {
     return day === 0 ? 7 : day;
 }
 
+function updatePeriodFromTime(value) {
+    const match = /^(\d{1,2}):[0-5]\d$/.exec(String(value || '').trim());
+    if (!match) return '';
+    const hour = Number(match[1]) % 24;
+    if (hour < 5) return '深夜';
+    if (hour < 12) return '上午';
+    if (hour < 18) return '下午';
+    return '晚间';
+}
+
+function updatePeriodFromBroadcast(value) {
+    const text = String(value || '');
+    if (/深夜|凌晨/.test(text)) return '深夜';
+    if (/晚间|晚上/.test(text)) return '晚间';
+    if (/下午/.test(text)) return '下午';
+    if (/上午|早晨/.test(text)) return '上午';
+    return '';
+}
+
 function parseStaff(staffHtml) {
     const wanted = new Map([
         ['原作', 'originalWork'],
@@ -227,7 +246,7 @@ function parseYucPage(html, season) {
     let match;
     while ((match = schedulePattern.exec(html))) {
         const dateBlock = match[1];
-        const updateTime = htmlText(classContent(dateBlock, 'imgtext4')).replace(/~.*$/, '').trim();
+        const updateTime = htmlText(classContent(dateBlock, 'imgtext4') || classContent(dateBlock, 'imgtext5')).replace(/~.*$/, '').trim();
         const dateText = htmlText(classContent(dateBlock, 'imgep'));
         const imageUrl = /<img[^>]+data-src=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
             || /<a[^>]+href=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
@@ -240,6 +259,7 @@ function parseYucPage(html, season) {
             airDate,
             updateWeekDay: weekDayFromDate(airDate),
             updateTime: /^(?:[01]?\d|2\d):[0-5]\d$/.test(updateTime) ? updateTime.padStart(5, '0') : '',
+            updatePeriod: updatePeriodFromTime(updateTime),
         });
     }
 
@@ -261,11 +281,26 @@ function parseYucPage(html, season) {
         });
     }
 
-    return details.map(detail => {
-        const schedule = schedules.find(item => item.imageUrl && item.imageUrl === detail.imageUrl)
-            || schedules.map(item => ({ item, score: Math.max(titleScore(item.title, detail.titleCn), titleScore(item.title, detail.titleJp)) }))
-                .sort((a, b) => b.score - a.score)[0]?.item;
-        return { ...detail, schedule: schedule || null };
+    return schedules.map(schedule => {
+        const match = details.map(detail => ({
+            detail,
+            score: Math.max(
+                schedule.imageUrl && detail.imageUrl && schedule.imageUrl === detail.imageUrl ? 100 : 0,
+                titleScore(schedule.title, detail.titleCn),
+                titleScore(schedule.title, detail.titleJp),
+            ),
+        })).sort((left, right) => right.score - left.score)[0];
+        const detail = match?.score >= 55 ? match.detail : null;
+        const updatePeriod = updatePeriodFromBroadcast(detail?.broadcast) || schedule.updatePeriod;
+        return {
+            title: detail?.titleCn || schedule.title,
+            titleCn: detail?.titleCn || schedule.title,
+            titleJp: detail?.titleJp || '',
+            imageUrl: schedule.imageUrl,
+            broadcast: detail?.broadcast || '',
+            staff: detail?.staff || {},
+            schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '' },
+        };
     });
 }
 
@@ -289,6 +324,10 @@ function yucSeasonFromDate(value, now = new Date()) {
     const month = match ? Number(match[2]) : now.getMonth() + 1;
     const seasonMonth = month <= 3 ? 1 : month <= 6 ? 4 : month <= 9 ? 7 : 10;
     return `${year}${String(seasonMonth).padStart(2, '0')}`;
+}
+
+function isYucSeason(value) {
+    return /^\d{4}(01|04|07|10)$/.test(String(value || ''));
 }
 
 function downloadYucPage(path, transport = https) {
@@ -356,6 +395,35 @@ async function fetchYucAnime(event, origin) {
     }
 }
 
+async function fetchYucSeason(event, origin) {
+    const params = { ...(event.queryStringParameters || {}), ...(event.queryString || {}) };
+    const season = String(params.season || '');
+    if (!isYucSeason(season)) return response(400, { error: 'Invalid season' }, {}, origin);
+    const cached = yucPageCache.get(season);
+    if (cached?.expiresAt > Date.now()) {
+        return response(200, {
+            source: 'yuc.wiki',
+            season,
+            sourceUrl: `https://yuc.wiki/${season}/`,
+            records: cached.records,
+        }, { 'Cache-Control': 'public, max-age=21600' }, origin);
+    }
+    try {
+        const html = await downloadYucPage(`/${season}/`, http);
+        const records = parseYucPage(html, season);
+        if (records.length === 0) throw new Error('Yuc page structure was not recognized');
+        yucPageCache.set(season, { records, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+        return response(200, {
+            source: 'yuc.wiki',
+            season,
+            sourceUrl: `https://yuc.wiki/${season}/`,
+            records,
+        }, { 'Cache-Control': 'public, max-age=21600' }, origin);
+    } catch (error) {
+        return response(502, { error: error.message }, {}, origin);
+    }
+}
+
 exports._test = {
     getAllowedImageUrl,
     isAllowedRequest,
@@ -364,6 +432,8 @@ exports._test = {
     parseYucPage,
     matchYucAnime,
     yucSeasonFromDate,
+    updatePeriodFromTime,
+    updatePeriodFromBroadcast,
 };
 
 exports.main_handler = async event => {
@@ -385,6 +455,9 @@ exports.main_handler = async event => {
     }
     if (method === 'GET' && path === '/yuc/anime') {
         return fetchYucAnime(event, corsOrigin);
+    }
+    if (method === 'GET' && path === '/yuc/season') {
+        return fetchYucSeason(event, corsOrigin);
     }
     if (!isAllowedRequest(method, path)) return send(404, { error: 'Not found' });
 

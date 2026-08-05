@@ -3,11 +3,43 @@
 // ============================================================
 
 import { changeProgress } from '../core.js';
+import { getYucAnime } from '../api.js';
 import { getAnimeById, setState, state, updateAnime } from '../store.js';
 import { loadCollapsed, saveCollapsed } from '../storage.js';
 import { loadListCovers } from '../renderer/list.js';
 import { render } from '../renderer/index.js';
 import { attachIoModals } from './io.js';
+
+let lastYucScheduleSync = 0;
+let yucScheduleSyncPromise = null;
+
+async function syncYucSchedules() {
+    if (state.settings.updateSource !== 'yuc' || Date.now() - lastYucScheduleSync < 6 * 60 * 60 * 1000) return;
+    if (yucScheduleSyncPromise) return yucScheduleSyncPromise;
+    lastYucScheduleSync = Date.now();
+    const candidates = state.animeList.filter(anime => anime.type === 'chasing' && anime.title);
+    yucScheduleSyncPromise = Promise.allSettled(candidates.map(async anime => {
+        const yuc = await getYucAnime({ title: anime.title, airDate: anime.airDate });
+        const schedule = yuc?.schedule;
+        if (!schedule) return false;
+        const updates = {
+            airDate: schedule.airDate || anime.airDate,
+            updateWeekDay: schedule.updateWeekDay || anime.updateWeekDay,
+            updateTime: schedule.updateTime || anime.updateTime,
+            updatePeriod: schedule.updatePeriod || anime.updatePeriod,
+        };
+        return Object.entries(updates).some(([key, value]) => value !== anime[key])
+            ? updateAnime(anime.id, updates, { render: false })
+            : false;
+    })).then(results => {
+        yucScheduleSyncPromise = null;
+        if (results.some(result => result.status === 'fulfilled' && result.value) && state.currentPage === 'list') render();
+    }).catch(error => {
+        yucScheduleSyncPromise = null;
+        console.warn('[Yuc] 番剧放送信息同步失败', error);
+    });
+    return yucScheduleSyncPromise;
+}
 
 /** 绑定列表页事件 */
 export function attachListEvents() {
@@ -119,6 +151,8 @@ export function attachListEvents() {
     // 设置按钮
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) settingsBtn.addEventListener('click', () => setState({ currentPage: 'settings' }));
+    const yucScheduleBtn = document.getElementById('yucScheduleBtn');
+    if (yucScheduleBtn) yucScheduleBtn.addEventListener('click', () => setState({ currentPage: 'yucSchedule' }));
 
     // 番剧卡片点击 → 详情页
     document.querySelectorAll('.anime-card').forEach(card => {
@@ -146,4 +180,5 @@ export function attachListEvents() {
     if (state.settings.listStyle === 'cover') {
         setTimeout(() => loadListCovers(), 100);
     }
+    setTimeout(() => syncYucSchedules(), 0);
 }

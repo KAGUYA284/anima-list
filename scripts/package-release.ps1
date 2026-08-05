@@ -44,23 +44,22 @@ New-Item -ItemType Directory -Force -Path $windowsInstaller, $windowsPortable, $
 Copy-Item -LiteralPath $installerSource -Destination (Join-Path $windowsInstaller "Anima-List-Setup-$version.exe")
 Copy-Item -LiteralPath $apkSource -Destination (Join-Path $androidTarget "Anima-List-v$version-signed.apk")
 
-$cleanStage = Join-Path $stagingRoot 'Anima List'
-Copy-Item -LiteralPath $portableSource -Destination $cleanStage -Recurse
-$cleanZip = Join-Path $windowsPortable "Anima-List-v$version-Portable.zip"
-Compress-Archive -LiteralPath $cleanStage -DestinationPath $cleanZip -CompressionLevel Optimal
+$cleanTarget = Join-Path $windowsPortable "Anima List v$version"
+New-Item -ItemType Directory -Force -Path $cleanTarget | Out-Null
+Copy-Item -Path (Join-Path $portableSource '*') -Destination $cleanTarget -Recurse -Force
 
-$cacheStage = Join-Path $stagingRoot 'Anima List 缓存测试版'
-Copy-Item -LiteralPath $portableSource -Destination $cacheStage -Recurse
-New-Item -ItemType File -Force -Path (Join-Path $cacheStage '.anima-list-cache-test') | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $cacheStage 'test-user-data') | Out-Null
+$cacheTarget = Join-Path $windowsCacheTest "Anima List v$version 缓存测试版"
+New-Item -ItemType Directory -Force -Path $cacheTarget | Out-Null
+Copy-Item -Path (Join-Path $portableSource '*') -Destination $cacheTarget -Recurse -Force
+New-Item -ItemType File -Force -Path (Join-Path $cacheTarget '.anima-list-cache-test') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $cacheTarget 'test-user-data') | Out-Null
 @'
 此版本仅用于缓存和本地数据复现测试。
 
 直接运行 “Anima List.exe” 即可。浏览器缓存、Local Storage、IndexedDB 等数据会保留在
-同目录的 test-user-data 文件夹中；删除该文件夹即可重置测试数据。
-'@ | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $cacheStage '缓存测试版说明.txt')
-$cacheZip = Join-Path $windowsCacheTest "Anima-List-v$version-Portable-Cache-Test.zip"
-Compress-Archive -LiteralPath $cacheStage -DestinationPath $cacheZip -CompressionLevel Optimal
+同目录的 test-user-data 文件夹中；删除该文件夹即可重置测试数据。首次运行会在该目录
+建立新的测试缓存，后续运行会复用同一份缓存。
+'@ | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $cacheTarget '缓存测试版说明.txt')
 
 Copy-Item -LiteralPath (Join-Path $workspace 'dist') -Destination (Join-Path $webTarget 'web') -Recurse
 Copy-Item -LiteralPath (Join-Path $workspace 'scripts\release\server.ps1') -Destination $webTarget
@@ -73,10 +72,10 @@ Windows\安装版
   Windows NSIS 安装程序。
 
 Windows\免安装版
-  不携带应用运行缓存的正式免安装压缩包。
+  不携带应用运行缓存的正式免安装目录，直接运行其中的 Anima List.exe。
 
 Windows\缓存测试版
-  将缓存和本地数据保存在解压目录 test-user-data 中的测试压缩包。
+  将缓存和本地数据保存在同目录 test-user-data 中的测试目录，直接运行其中的 Anima List.exe。
 
 Android
   已签名 Release APK。

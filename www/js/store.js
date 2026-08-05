@@ -41,6 +41,7 @@ export let state = {
     searchQuery: '',
     currentPage: 'list',
     currentAnimeId: null,
+    yucSeason: '',
     settings: { ...DEFAULT_SETTINGS, ...loadSettings() },
 };
 

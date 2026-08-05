@@ -27,6 +27,12 @@ export function renderListPage() {
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                         </svg>
                     </button>
+                    <button class="btn btn-icon" id="yucScheduleBtn" title="新番表" aria-label="新番表">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3" y="4.5" width="18" height="16" rx="2"/>
+                            <path d="M7 3v3M17 3v3M3 9h18M7 13h.01M12 13h.01M17 13h.01M7 17h.01M12 17h.01"/>
+                        </svg>
+                    </button>
                     <button class="btn btn-primary" id="addAnimeBtn">
                         <span>+</span>
                         <span>添加</span>
@@ -193,7 +199,7 @@ function renderAnimeCard(anime) {
                     <div class="card-title">${escHtml(anime.title)}</div>
                     <div class="card-meta">
                         <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
-                        ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}</span>` : ''}
+                        ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>` : ''}
                     </div>
                     <div class="card-progress-cover">
                         <span class="progress-text">${anime.currentEpisode}/${anime.totalEpisodes}</span>
@@ -216,7 +222,7 @@ function renderAnimeCard(anime) {
                 </div>
                 <div class="card-meta">
                     <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
-                    ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}</span>` : ''}
+                    ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>` : ''}
                     <div class="card-stars">
                         ${renderStars(anime.rating)}
                     </div>

@@ -7,6 +7,7 @@ import { deriveStatus } from '../core.js';
 import { getBangumiSubject, getYucAnime, searchBangumi } from '../api.js';
 import { addAnime, setState, state, updateAnime } from '../store.js';
 import { escHtml, getWeekDayFromDate, showToast } from '../utils.js';
+import { updatePeriodFromTime } from '../yuc.js';
 import { updateFormRatingUI, updateFormStatusUI, updateFormTypeUI } from '../renderer/form.js';
 
 /** 绑定表单页事件 */
@@ -16,7 +17,8 @@ export function attachFormEvents(anime) {
         status: anime?.status || 'watching',
         rating: anime?.rating || 0,
         type: anime?.type || 'chasing',
-        bgmId: anime?.bgmId || ''
+        bgmId: anime?.bgmId || '',
+        updatePeriod: anime?.updatePeriod || '',
     };
     let selectedBgmId = anime?.bgmId || '';
 
@@ -29,9 +31,10 @@ export function attachFormEvents(anime) {
         if (!formUpdateWeekDay || !chasingWeekdayInfo) return;
         const weekday = Number(formUpdateWeekDay.value) || 0;
         const time = formUpdateTime?.value.trim() || '';
+        const period = updatePeriodFromTime(time);
         const sourceLabel = source === 'yuc' ? '长门有希' : source === 'date' ? '已根据放送日期推断' : '当前设置';
         chasingWeekdayInfo.textContent = weekday
-            ? `${sourceLabel}：${WEEK_DAYS[weekday]}${time ? ` ${time}` : ''}更新`
+            ? `${sourceLabel}：${WEEK_DAYS[weekday]}${time ? ` ${time}${period ? `（${period}）` : ''}` : ''}更新`
             : '选择实际的每周更新时间';
     }
 
@@ -215,6 +218,7 @@ export function attachFormEvents(anime) {
         let airDate = '';
         let updateWeekDay = '';
         let updateTime = '';
+        let updatePeriod = '';
         let completedDate = '';
         let startDate = '';
 
@@ -227,6 +231,7 @@ export function attachFormEvents(anime) {
                 alert('具体更新时间格式应为 HH:MM，可使用 24:00 至 29:59 表示日本深夜档');
                 return;
             }
+            updatePeriod = updatePeriodFromTime(updateTime) || formData.updatePeriod;
         } else {
             airDate = document.getElementById('formBingeAirDate')?.value || '';
             startDate = document.getElementById('formAirDateBinge')?.value || '';
@@ -246,6 +251,7 @@ export function attachFormEvents(anime) {
             type: formData.type,
             updateWeekDay,
             updateTime,
+            updatePeriod,
             completedDate,
             startDate,
             bgmId: selectedBgmId || (anime?.bgmId || '')
@@ -354,6 +360,7 @@ export function attachFormEvents(anime) {
                                         formUpdateWeekDay.value = String(yuc.schedule.updateWeekDay);
                                     }
                                     if (formUpdateTime) formUpdateTime.value = yuc.schedule.updateTime || '';
+                                    formData.updatePeriod = yuc.schedule.updatePeriod || updatePeriodFromTime(yuc.schedule.updateTime);
                                     updateChasingWeekdayHint('yuc');
                                     yucMatched = true;
                                 }
@@ -362,6 +369,7 @@ export function attachFormEvents(anime) {
                             }
                         } else if (formUpdateTime) {
                             formUpdateTime.value = '';
+                            formData.updatePeriod = '';
                         }
 
                         bgmResults.style.display = 'none';

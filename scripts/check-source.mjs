@@ -25,6 +25,7 @@ const electronMain = readFileSync('electron/main.cjs', 'utf8');
 const webLauncher = readFileSync('scripts/release/启动网页版.cmd', 'utf8');
 const webServer = readFileSync('scripts/release/server.ps1', 'utf8');
 const proxySource = readFileSync('scf_bangumi_proxy.js', 'utf8');
+const releasePackage = readFileSync('scripts/package-release.ps1', 'utf8');
 // 拆分后前端逻辑分散在多个文件，故对整个 www/js 目录的拼接内容做断言，
 // 避免绑定到具体文件名（模块再拆分时不误报）。
 const webSource = sourceFiles
@@ -65,6 +66,9 @@ if (!webSource.includes('encoding: Encoding.UTF8') || !webSource.includes('await
 if (!proxySource.includes("path === '/yuc/anime'") || !proxySource.includes("hostname: 'yuc.wiki'")) {
     throw new Error('SCF 代理缺少固定主机的长门有希季度信息抓取路由');
 }
+if (!proxySource.includes("path === '/yuc/season'") || !proxySource.includes('updatePeriodFromBroadcast')) {
+    throw new Error('SCF 代理缺少季度新番表路由或播出时段映射');
+}
 if (!webSource.includes("updateSource: 'yuc'") || !webSource.includes('showAnimeDetails: true')) {
     throw new Error('设置缺少长门有希更新时间来源或番剧具体信息开关');
 }
@@ -73,6 +77,15 @@ if (!webSource.includes('1. 长门有希') || !webSource.includes('2. bangumi'))
 }
 if (!webSource.includes('getYucAnime') || !webSource.includes('formUpdateTime')) {
     throw new Error('前端缺少长门有希信息查询或具体更新时间字段');
+}
+if (!webSource.includes('getYucSeasonList') || !webSource.includes('yucScheduleBtn') || !webSource.includes("case 'yucSchedule'")) {
+    throw new Error('前端缺少季度新番表入口或数据加载逻辑');
+}
+if (!electronMain.includes("preload: path.join(__dirname, 'preload.cjs')") || !webSource.includes('animaListDesktop')) {
+    throw new Error('Electron 缺少端侧 yuc 页面抓取桥接');
+}
+if (releasePackage.includes('Compress-Archive') || !releasePackage.includes('Windows\\免安装版') || !releasePackage.includes('test-user-data')) {
+    throw new Error('发布脚本仍将免安装版压缩，或缺少缓存测试版数据目录');
 }
 
 // 版本号单一来源守卫：package.json / constants.js / build.gradle 必须一致。

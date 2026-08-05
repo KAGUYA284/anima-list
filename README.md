@@ -26,11 +26,15 @@
 
 ## 番剧信息来源
 
-设置页的“更新时间来源”支持“1. 长门有希”和“2. bangumi”。长门有希模式通过
-腾讯云 SCF 的 `/yuc/anime` 路由读取 `yuc.wiki/YYYYMM/` 季度页，按封面和标准化
+设置页的“更新时间来源”支持“1. 长门有希”和“2. bangumi”。长门有希模式在 Electron
+中通过 Node.js 端侧读取，在 Web/移动端尝试直接读取 yuc.wiki，失败后才通过腾讯云 SCF
+的 `/yuc/anime` 路由读取 `yuc.wiki/YYYYMM/` 季度页，按封面和标准化
 中日文标题映射番剧，获取首播日期、每周更新时间（具体到小时）以及原作、导演、
 副导演、编剧、人物设计、动画人设、动画制作。详情页信息可通过“显示番剧具体信息”
 单独开关。
+
+列表页设置按钮右侧的日历图标打开季度新番表。新番表通过同一套端侧优先抓取逻辑加载
+每个季度页面，点击“加入待看”即可创建一条“想看”状态的追番记录。
 
 代理仅访问固定的 `yuc.wiki` 主机和季度路径，并把远端 HTML 解析成白名单纯文本字段，
 不会执行或向客户端透传页面脚本。当前该站 HTTPS 证书已过期，因此代理暂时从同一
@@ -62,8 +66,8 @@ npm run release:all   # 检查并构建、整理 Windows / Android / Web 全部�
 发布版本/v1.2.0/
 ├─ Windows/
 │  ├─ 安装版/Anima-List-Setup-1.2.0.exe
-│  ├─ 免安装版/Anima-List-v1.2.0-Portable.zip
-│  └─ 缓存测试版/Anima-List-v1.2.0-Portable-Cache-Test.zip
+│  ├─ 免安装版/Anima List v1.2.0/（目录版）
+│  └─ 缓存测试版/Anima List v1.2.0 缓存测试版/（目录版）
 ├─ Android/Anima-List-v1.2.0-signed.apk
 ├─ Web/
 │  ├─ 启动网页版.cmd
@@ -72,9 +76,10 @@ npm run release:all   # 检查并构建、整理 Windows / Android / Web 全部�
 └─ 版本说明.txt
 ```
 
-正式免安装版不携带运行缓存。缓存测试版会把缓存、Local Storage 和 IndexedDB
-固定保存在解压目录的 `test-user-data/` 中，删除该目录即可重置。网页版双击
-`启动网页版.cmd` 即可运行，不依赖 Node.js。
+正式免安装版不携带运行缓存，直接进入目录运行 `Anima List.exe`。缓存测试版会把缓存、
+Local Storage 和 IndexedDB 固定保存在同目录的 `test-user-data/` 中；首次启动会创建
+该目录，后续启动会复用缓存，删除该目录即可重置。网页版双击 `启动网页版.cmd` 即可运行，
+不依赖 Node.js。
 
 ## 版本号单一来源
 

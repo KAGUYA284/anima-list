@@ -4,11 +4,12 @@
 
 import { getCurrentAnime, state } from '../store.js';
 import { hydrateBangumiImages } from '../api.js';
-import { attachDetailEvents, attachFormEvents, attachListEvents, attachSettingsEvents } from '../events/index.js';
+import { attachDetailEvents, attachFormEvents, attachListEvents, attachSettingsEvents, attachYucEvents } from '../events/index.js';
 import { renderListPage } from './list.js';
 import { renderDetailPage } from './detail.js';
 import { renderFormPage } from './form.js';
 import { renderSettingsPage } from './settings.js';
+import { renderYucPage } from './yuc.js';
 
 // 保持对外公共 API：渲染层子模块的可复用导出集中于此再导出。
 export { loadListCovers } from './list.js';
@@ -53,6 +54,10 @@ export function render() {
         case 'settings':
             app.innerHTML = renderSettingsPage();
             attachSettingsEvents();
+            break;
+        case 'yucSchedule':
+            app.innerHTML = renderYucPage();
+            attachYucEvents();
             break;
     }
     hydrateBangumiImages(app);

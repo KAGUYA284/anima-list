@@ -1,5 +1,12 @@
 import { state } from './store.js';
 import { safeImageUrl } from './utils.js';
+import {
+    getYucAnimeDirect,
+    getYucSeasonList as fetchYucSeasonList,
+    updatePeriodFromBroadcast,
+    updatePeriodFromTime,
+    yucSeasonFromDate,
+} from './yuc.js';
 
 const API_PROXIES = {
     direct: 'https://api.bgm.tv',
@@ -274,13 +281,23 @@ export function getCachedBangumiSubject(id) {
     return getCacheEntry(key)?.value || null;
 }
 
-export function getYucAnime({ title = '', titleCn = '', titleJp = '', airDate = '' } = {}) {
+export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airDate = '' } = {}) {
     const query = new URLSearchParams();
     if (title) query.set('title', String(title).slice(0, 300));
     if (titleCn) query.set('titleCn', String(titleCn).slice(0, 300));
     if (titleJp) query.set('titleJp', String(titleJp).slice(0, 300));
     if (airDate) query.set('airDate', String(airDate).slice(0, 10));
-    if (![...query.keys()].some(key => key.startsWith('title'))) return Promise.resolve(null);
+    if (![...query.keys()].some(key => key.startsWith('title'))) return null;
+
+    try {
+        const direct = await getYucAnimeDirect({ title, titleCn, titleJp, airDate });
+        if (direct) {
+            const season = yucSeasonFromDate(airDate);
+            return { source: 'yuc.wiki', season, sourceUrl: `https://yuc.wiki/${season}/`, ...direct };
+        }
+    } catch (error) {
+        console.info('[Yuc] 端侧抓取失败，回退云函数', error.message);
+    }
 
     const key = `${API_PROXIES.proxy1}:yuc:${query}`;
     return cachedRequest(key, async () => {
@@ -288,6 +305,15 @@ export function getYucAnime({ title = '', titleCn = '', titleJp = '', airDate = 
             retries: 1,
             timeoutMs: 15000,
         });
-        return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+        if (data.schedule && !data.schedule.updatePeriod) {
+            data.schedule.updatePeriod = updatePeriodFromBroadcast(data.schedule.broadcast)
+                || updatePeriodFromTime(data.schedule.updateTime);
+        }
+        return data;
     }, 6 * 60 * 60 * 1000);
+}
+
+export function getYucSeasonList(season) {
+    return fetchYucSeasonList(season);
 }

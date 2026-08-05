@@ -61,7 +61,7 @@ export function renderDetailPage() {
                 ${anime.type === 'chasing' ? `
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
-                        <span>${anime.updateWeekDay ? WEEK_DAYS[anime.updateWeekDay] : '-'}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}</span>
+                        <span>${anime.updateWeekDay ? WEEK_DAYS[anime.updateWeekDay] : '-'}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>
                     </div>
                 ` : `
                     ${anime.startDate ? `

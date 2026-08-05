@@ -2,8 +2,8 @@
 // 事件处理 · 详情页 - Anime Tracker
 // ============================================================
 
-import { changeProgress, extractAnimationStudio } from '../core.js';
-import { getBangumiCharacters, getBangumiImageUrl, getBangumiPersons, getBangumiSubject, getYucAnime, hydrateBangumiImages } from '../api.js';
+import { changeProgress } from '../core.js';
+import { getBangumiCharacters, getBangumiImageUrl, getBangumiSubject, getYucAnime, hydrateBangumiImages } from '../api.js';
 import { deleteAnime, getAnimeById, getCurrentAnime, setState, state, updateAnime } from '../store.js';
 import { escHtml, safeImageUrl } from '../utils.js';
 
@@ -139,18 +139,15 @@ async function loadBangumiDetailInto(bgmId) {
     if (!container) return;
     container.innerHTML = '<div class="bgm-loading">加载番剧详情...</div>';
 
-    const [subject, characters, persons] = await Promise.all([
+    const [subject, characters] = await Promise.all([
         getBangumiSubject(bgmId),
         getBangumiCharacters(bgmId),
-        getBangumiPersons(bgmId),
     ]);
 
     if (!subject) {
         container.innerHTML = '';
         return;
     }
-
-    const studio = extractAnimationStudio(persons, Array.isArray(subject.infobox) ? subject.infobox : []);
 
     // 修复旧代理曾写入本地记录的 U+FFFD 替换字符标题。
     const currentAnime = getCurrentAnime();
@@ -206,7 +203,6 @@ async function loadBangumiDetailInto(bgmId) {
                 `).join('')}
             </div>
         ` : ''}
-        ${studio ? `<div class="bgm-studio"><span class="info-label">动画制作</span><span>${escHtml(studio)}</span></div>` : ''}
     `;
     hydrateBangumiImages(container);
 }

@@ -31,7 +31,7 @@ export function showReminder() {
             }
             html += `<div class="reminder-item">
                 <span>${escHtml(a.title)}</span>
-                <span class="reminder-weekday">${a.updateTime ? `${escHtml(a.updateTime)} · ` : ''}${a.currentEpisode}/${a.totalEpisodes}集${completeInfo}</span>
+                <span class="reminder-weekday">${a.updateTime ? `${escHtml(a.updateTime)}${a.updatePeriod ? `（${escHtml(a.updatePeriod)}）` : ''} · ` : ''}${a.currentEpisode}/${a.totalEpisodes}集${completeInfo}</span>
             </div>`;
         });
         html += `</div>`;

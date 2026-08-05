@@ -3,6 +3,7 @@ import { generateId } from './utils.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const UPDATE_TIME_PATTERN = /^(?:[01]\d|2\d):[0-5]\d$/;
+const UPDATE_PERIODS = new Set(['上午', '下午', '晚间', '深夜']);
 
 function cleanString(value, maxLength = 50000) {
     return typeof value === 'string' ? value.slice(0, maxLength) : '';
@@ -62,6 +63,9 @@ export function normalizeAnimeRecord(value, { requireTitle = true } = {}) {
         updateWeekDay: type === 'chasing' ? Math.min(7, Math.max(0, Number(value.updateWeekDay) || 0)) : '',
         updateTime: type === 'chasing' && UPDATE_TIME_PATTERN.test(cleanString(value.updateTime, 5))
             ? cleanString(value.updateTime, 5)
+            : '',
+        updatePeriod: type === 'chasing' && UPDATE_PERIODS.has(cleanString(value.updatePeriod, 2))
+            ? cleanString(value.updatePeriod, 2)
             : '',
         completedDate: cleanDate(value.completedDate),
         startDate: cleanDate(value.startDate),
