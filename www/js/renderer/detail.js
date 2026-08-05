@@ -5,6 +5,7 @@
 import { STATUS_CONFIG, TYPE_CONFIG, WEEK_DAYS } from '../constants.js';
 import { getCurrentAnime, state } from '../store.js';
 import { escHtml, renderEditableStars } from '../utils.js';
+import { hasYucSeasonData } from '../yuc.js';
 import { renderListPage } from './list.js';
 
 /** 渲染详情页 */
@@ -18,6 +19,7 @@ export function renderDetailPage() {
         ? (anime.currentEpisode / anime.totalEpisodes) * 100
         : 0;
     const statusConfig = STATUS_CONFIG[anime.status] || STATUS_CONFIG.want;
+    const showYucTime = hasYucSeasonData(anime.airDate);
 
     return `
         <header class="header">
@@ -61,7 +63,7 @@ export function renderDetailPage() {
                 ${anime.type === 'chasing' ? `
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
-                        <span>${anime.updateWeekDay ? WEEK_DAYS[anime.updateWeekDay] : '-'}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>
+                        <span>${anime.updateWeekDay ? WEEK_DAYS[anime.updateWeekDay] : '-'}${showYucTime && anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${showYucTime && anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>
                     </div>
                 ` : `
                     ${anime.startDate ? `

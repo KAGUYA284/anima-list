@@ -1,9 +1,12 @@
 import { state } from '../store.js';
-import { escHtml } from '../utils.js';
+import { WEEK_DAYS } from '../constants.js';
+import { escHtml, safeImageUrl } from '../utils.js';
 import { yucSeasonFromDate, yucSeasonLabel } from '../yuc.js';
 
 export function renderYucPage() {
     const season = state.yucSeason || yucSeasonFromDate();
+    const year = season.slice(0, 4);
+    const quarter = season.slice(4);
     return `
         <header class="header">
             <div class="header-content">
@@ -14,9 +17,22 @@ export function renderYucPage() {
         </header>
         <main class="main-content yuc-schedule-page">
             <div class="yuc-season-toolbar">
-                <button class="btn btn-secondary" id="yucPreviousSeason">← 上一季度</button>
                 <h1 id="yucSeasonTitle">${escHtml(yucSeasonLabel(season))}</h1>
-                <button class="btn btn-secondary" id="yucNextSeason">下一季度 →</button>
+                <div class="yuc-season-filters" aria-label="新番表季度筛选">
+                    <label>
+                        <span>年份</span>
+                        <input class="form-input" type="number" id="yucYearFilter" min="2019" step="1" value="${escHtml(year)}">
+                    </label>
+                    <label>
+                        <span>季度</span>
+                        <select class="form-input" id="yucQuarterFilter">
+                            <option value="01" ${quarter === '01' ? 'selected' : ''}>冬季（1 月）</option>
+                            <option value="04" ${quarter === '04' ? 'selected' : ''}>春季（4 月）</option>
+                            <option value="07" ${quarter === '07' ? 'selected' : ''}>夏季（7 月）</option>
+                            <option value="10" ${quarter === '10' ? 'selected' : ''}>秋季（10 月）</option>
+                        </select>
+                    </label>
+                </div>
             </div>
             <p class="yuc-season-source">数据来源：yuc.wiki · 优先端侧抓取，失败时使用云函数</p>
             <div id="yucSeasonStatus" class="bgm-loading">正在加载季度新番表...</div>
@@ -26,24 +42,52 @@ export function renderYucPage() {
 }
 
 export function renderYucRecords(records, existingTitles = new Set()) {
-    return records.map((record, index) => {
+    const indexed = records.map((record, index) => ({ record, index }));
+    const sections = WEEK_DAYS.slice(1).map((label, index) => ({
+        label,
+        weekday: index + 1,
+        records: indexed.filter(item => Number(item.record.schedule?.updateWeekDay) === index + 1),
+    }));
+    const unscheduled = indexed.filter(item => !Number(item.record.schedule?.updateWeekDay));
+    if (unscheduled.length) sections.push({ label: '时间待定', weekday: 0, records: unscheduled });
+
+    return sections.filter(section => section.records.length).map(section => `
+        <section class="yuc-weekday-section" data-weekday="${section.weekday}">
+            <div class="yuc-weekday-heading">
+                <h2>${escHtml(section.label)}</h2>
+                <span>${section.records.length} 部</span>
+            </div>
+            <div class="yuc-weekday-grid">
+                ${section.records.map(({ record, index }) => renderYucRecord(record, index, existingTitles)).join('')}
+            </div>
+        </section>
+    `).join('');
+}
+
+function renderYucRecord(record, index, existingTitles) {
         const schedule = record.schedule || {};
         const title = record.titleCn || record.title || record.titleJp || `未命名番剧 ${index + 1}`;
         const key = String(title).normalize('NFKC').replace(/[\p{P}\p{S}\s]/gu, '').toLocaleLowerCase('zh-CN');
         const exists = existingTitles.has(key);
         const date = schedule.airDate || '日期待定';
-        const weekday = schedule.updateWeekDay ? ['','周一','周二','周三','周四','周五','周六','周日'][schedule.updateWeekDay] : '';
         const time = schedule.updateTime || '';
         const period = schedule.updatePeriod || '';
         const staff = record.staff || {};
+        const imageUrl = safeImageUrl(record.imageUrl);
         const details = [staff.director && `导演：${staff.director}`, staff.animationStudio && `制作：${staff.animationStudio}`]
             .filter(Boolean).join(' · ');
         return `
             <article class="yuc-season-card" data-yuc-index="${index}">
+                <div class="yuc-season-cover">
+                    ${imageUrl
+                        ? `<img src="${escHtml(imageUrl)}" alt="${escHtml(title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+                        : ''}
+                    <div class="yuc-season-cover-placeholder" ${imageUrl ? 'style="display:none;"' : ''}>${escHtml(title.charAt(0))}</div>
+                </div>
                 <div class="yuc-season-card-main">
                     <h2>${escHtml(title)}</h2>
                     ${record.titleJp && record.titleJp !== title ? `<p class="yuc-season-jp">${escHtml(record.titleJp)}</p>` : ''}
-                    <p class="yuc-season-meta">首播：${escHtml(date)}${weekday ? ` · ${escHtml(weekday)}` : ''}${time ? ` · ${escHtml(time)}` : ''}${period ? `（${escHtml(period)}）` : ''}</p>
+                    <p class="yuc-season-meta">首播：${escHtml(date)}${time ? ` · ${escHtml(time)}` : ''}${period ? `（${escHtml(period)}）` : ''}</p>
                     ${details ? `<p class="yuc-season-staff">${escHtml(details)}</p>` : ''}
                 </div>
                 <button class="btn ${exists ? 'btn-secondary' : 'btn-primary'} yuc-add-button" data-yuc-add="${index}" ${exists ? 'disabled' : ''}>
@@ -51,5 +95,4 @@ export function renderYucRecords(records, existingTitles = new Set()) {
                 </button>
             </article>
         `;
-    }).join('');
 }

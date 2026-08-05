@@ -16,7 +16,7 @@ export const STORAGE_KEY = 'anime-tracker-data';
 export const COLLAPSE_KEY = 'anime-tracker-collapse';
 export const SETTINGS_KEY = 'anime-tracker-settings';
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 
 /** 日本动画季度边界定义（用于番剧按季归类） */
 export const QUARTER_BOUNDARIES = {

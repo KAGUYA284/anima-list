@@ -5,7 +5,7 @@
 
 | 端 | 外壳 | 产物 |
 | --- | --- | --- |
-| Web | Vite 静态文件 + PowerShell 启动器 | `发布版本/v1.2.0/Web/` |
+| Web | Vite 静态文件 + PowerShell 启动器 | `发布版本/v1.2.1/Web/` |
 | Android / iOS | Capacitor | APK / IPA |
 | Windows 免安装版 | Electron | 正式无缓存包、缓存测试包 |
 | Windows 安装版 | Electron + NSIS | NSIS 安装程序 |
@@ -33,8 +33,11 @@
 副导演、编剧、人物设计、动画人设、动画制作。详情页信息可通过“显示番剧具体信息”
 单独开关。
 
-列表页设置按钮右侧的日历图标打开季度新番表。新番表通过同一套端侧优先抓取逻辑加载
-每个季度页面，点击“加入待看”即可创建一条“想看”状态的追番记录。
+列表页设置按钮右侧的日历图标打开季度新番表。新番表通过年份和季度筛选器加载 2019 年
+10 月至未来任意年份的季度页面，并按周一至周日显示 yuc.wiki 图片。点击“加入待看”时
+先通过 Bangumi 代理匹配 subject ID，随后留在当前新番表页面；主列表封面与详情页角色、
+声优继续使用 Bangumi 数据。2019 年 10 月前统一显示“无数据”，也不展示 yuc.wiki
+具体时间段和制作信息。
 
 代理仅访问固定的 `yuc.wiki` 主机和季度路径，并把远端 HTML 解析成白名单纯文本字段，
 不会执行或向客户端透传页面脚本。当前该站 HTTPS 证书已过期，因此代理暂时从同一
@@ -60,15 +63,15 @@ npm run release:all   # 检查并构建、整理 Windows / Android / Web 全部�
 
 ## 发布目录
 
-`npm run release:all` 完成后，当前版本统一放在 `发布版本/v1.2.0/`：
+`npm run release:all` 完成后，当前版本统一放在 `发布版本/v1.2.1/`：
 
 ```text
-发布版本/v1.2.0/
+发布版本/v1.2.1/
 ├─ Windows/
-│  ├─ 安装版/Anima-List-Setup-1.2.0.exe
-│  ├─ 免安装版/Anima List v1.2.0/（目录版）
-│  └─ 缓存测试版/Anima List v1.2.0 缓存测试版/（目录版）
-├─ Android/Anima-List-v1.2.0-signed.apk
+│  ├─ 安装版/Anima-List-Setup-1.2.1.exe
+│  ├─ 免安装版/Anima List v1.2.1/（目录版）
+│  └─ 缓存测试版/Anima List v1.2.1 缓存测试版/（目录版）
+├─ Android/Anima-List-v1.2.1-signed.apk
 ├─ Web/
 │  ├─ 启动网页版.cmd
 │  ├─ server.ps1
@@ -96,7 +99,7 @@ Local Storage 和 IndexedDB 固定保存在同目录的 `test-user-data/` 中；
 
 发布前按顺序执行：
 
-1. **改版本**：在 `package.json` 里更新 `version`（如 `1.1.0` → `1.2.0`）。
+1. **改版本**：在 `package.json` 里更新 `version`（如 `1.2.0` → `1.2.1`）。
 2. **递增 versionCode**：在 `android/app/build.gradle` 手动 +1。
 3. **同步版本号**：`npm run sync:version`（`prebuild` 也会自动跑）。
 4. **过门禁**：`npm run check` 全绿（lint + test + build + dist 校验）。

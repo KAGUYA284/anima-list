@@ -40,6 +40,7 @@ test('binaryResponse 无 Origin 时不下发 CORS 头', () => {
 test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () => {
     const cover = 'https://i0.hdslb.com/bfs/new_dyn/example.jpg';
     const html = `
+        <div><table class="date_"><tr><td class="date2">周四 (木)</td></tr></table></div>
         <div style="float:left"><div class="div_date">
             <p class="imgtext4">22:00~</p><p class="imgep">7/2~</p>
             <a href="${cover}"><img src="${cover}"></a>
@@ -85,4 +86,17 @@ test('Yuc 播出时间可以映射到具体时段', () => {
     assert.equal(_test.updatePeriodFromTime('15:00'), '下午');
     assert.equal(_test.updatePeriodFromTime('22:00'), '晚间');
     assert.equal(_test.updatePeriodFromBroadcast('7/2周四深夜'), '深夜');
+});
+
+test('Yuc 连续播出条目继承页面星期分组', () => {
+    const html = `
+        <table class="date_"><tr><td class="date2">周五 (金)</td></tr></table>
+        <div style="float:left"><div class="div_date">
+            <p class="imgtext5">23:30~</p><p class="imgep">(全24话)</p>
+            <img data-src="https://i0.hdslb.com/ongoing.jpg">
+        </div><div><table><tr><td class="date_title_">连续播出作品</td></tr></table></div></div>`;
+    const records = _test.parseYucPage(html, '202607');
+    assert.equal(records.length, 1);
+    assert.equal(records[0].schedule.airDate, '');
+    assert.equal(records[0].schedule.updateWeekDay, 5);
 });

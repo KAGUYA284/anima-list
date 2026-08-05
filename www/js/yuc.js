@@ -4,6 +4,7 @@ const yucCache = new Map();
 const yucInFlight = new Map();
 
 export const YUC_PERIODS = ['上午', '下午', '晚间', '深夜'];
+export const YUC_MIN_SEASON = '201910';
 
 export function yucSeasonFromDate(value, now = new Date()) {
     const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value || '');
@@ -25,6 +26,13 @@ export function yucSeasonLabel(season) {
     const labels = { 1: '冬番', 4: '春番', 7: '夏番', 10: '秋番' };
     if (!SEASON_PATTERN.test(season)) return '新番表';
     return `${season.slice(0, 4)}年${labels[Number(season.slice(4))] || '新番'}`;
+}
+
+export function hasYucSeasonData(value) {
+    const season = SEASON_PATTERN.test(String(value || ''))
+        ? String(value)
+        : yucSeasonFromDate(value);
+    return season >= YUC_MIN_SEASON;
 }
 
 export function updatePeriodFromTime(value) {
@@ -144,23 +152,35 @@ function parseStaff(element) {
 export function parseYucHtml(html, season) {
     if (typeof DOMParser === 'undefined') return [];
     const documentNode = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    const schedules = [...documentNode.querySelectorAll('.div_date')].map(block => {
+    const schedules = [];
+    let sectionWeekDay = 0;
+    const weekDayLabels = new Map([
+        ['周一', 1], ['周二', 2], ['周三', 3], ['周四', 4],
+        ['周五', 5], ['周六', 6], ['周日', 7],
+    ]);
+    for (const node of documentNode.querySelectorAll('table.date_, .div_date')) {
+        if (node.matches('table.date_')) {
+            const label = textOf(node.querySelector('.date2'));
+            sectionWeekDay = [...weekDayLabels].find(([name]) => label.includes(name))?.[1] || 0;
+            continue;
+        }
+        const block = node;
         const root = block.parentElement;
         const dateText = textOf(block.querySelector('.imgep'));
         const updateTime = textOf(block.querySelector('.imgtext4, .imgtext5')).replace(/~.*$/, '').trim();
         const airDate = fullYucDate(dateText, season);
         const title = textOf(root?.querySelector('.date_title_, .date_title__'));
-        return {
+        schedules.push({
             title,
             imageUrl: imageOf(block.querySelector('img')),
             dateText,
             airDate,
-            updateWeekDay: weekDayFromDate(airDate),
+            updateWeekDay: sectionWeekDay || weekDayFromDate(airDate),
             updateTime: /^(?:[01]?\d|2\d):[0-5]\d$/.test(updateTime) ? updateTime.padStart(5, '0') : '',
             updatePeriod: updatePeriodFromTime(updateTime),
             broadcast: '',
-        };
-    });
+        });
+    }
 
     const details = [...documentNode.querySelectorAll('table[width="500px"]')].map(table => ({
         titleCn: textOf(table.querySelector('[class^="title_cn_"]')),
@@ -228,6 +248,7 @@ async function fetchYucHtml(season) {
 
 export async function getYucSeasonList(season, { useProxy = true } = {}) {
     if (!SEASON_PATTERN.test(season)) throw new Error('季度参数无效');
+    if (!hasYucSeasonData(season)) return [];
     const cached = yucCache.get(season);
     if (cached?.expiresAt > Date.now()) return cached.records;
     if (yucInFlight.has(season)) return yucInFlight.get(season);
@@ -272,6 +293,7 @@ export function matchYucAnime(records, titles) {
 
 export async function getYucAnimeDirect(options = {}) {
     const season = yucSeasonFromDate(options.airDate);
+    if (!hasYucSeasonData(season)) return null;
     const records = await getYucSeasonList(season, { useProxy: false });
     return matchYucAnime(records, [options.title, options.titleCn, options.titleJp]);
 }

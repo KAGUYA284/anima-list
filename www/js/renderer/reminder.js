@@ -5,6 +5,7 @@
 import { getReminderItems } from '../core.js';
 import { state } from '../store.js';
 import { escHtml } from '../utils.js';
+import { hasYucSeasonData } from '../yuc.js';
 
 /** 渲染追番提醒弹窗 */
 export function showReminder() {
@@ -20,6 +21,7 @@ export function showReminder() {
         html += `<div class="reminder-section">
             <div class="reminder-section-title">📺 今天更新的番剧（${chasingToday.length}部）</div>`;
         chasingToday.forEach(a => {
+            const showYucTime = hasYucSeasonData(a.airDate);
             let completeInfo = '';
             if (a.airDate && a.totalEpisodes > 0) {
                 const airDate = new Date(a.airDate + 'T00:00:00');
@@ -31,7 +33,7 @@ export function showReminder() {
             }
             html += `<div class="reminder-item">
                 <span>${escHtml(a.title)}</span>
-                <span class="reminder-weekday">${a.updateTime ? `${escHtml(a.updateTime)}${a.updatePeriod ? `（${escHtml(a.updatePeriod)}）` : ''} · ` : ''}${a.currentEpisode}/${a.totalEpisodes}集${completeInfo}</span>
+                <span class="reminder-weekday">${showYucTime && a.updateTime ? `${escHtml(a.updateTime)}${a.updatePeriod ? `（${escHtml(a.updatePeriod)}）` : ''} · ` : ''}${a.currentEpisode}/${a.totalEpisodes}集${completeInfo}</span>
             </div>`;
         });
         html += `</div>`;

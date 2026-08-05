@@ -7,7 +7,9 @@ globalThis.localStorage = {
     setItem: (key, value) => storage.set(key, value),
 };
 
-const { apiFetch, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl } = await import('../www/js/api.js');
+const {
+    apiFetch, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl, selectBangumiMatch,
+} = await import('../www/js/api.js');
 
 test('Bangumi images use the image proxy only in proxy mode', () => {
     const image = 'https://lain.bgm.tv/r/800/pic/cover/l/example.jpg';
@@ -74,4 +76,17 @@ test('subject metadata is persisted and used as an offline stale fallback', asyn
     } finally {
         Date.now = realNow;
     }
+});
+
+test('Yuc records select the matching Bangumi subject by title and air date', () => {
+    const subjects = [
+        { id: 10, type: 2, name: '同名作品', name_cn: '同名作品', date: '2024-07-01' },
+        { id: 20, type: 2, name: '対象作品 第2期', name_cn: '目标作品 第二季', date: '2026-07-06' },
+    ];
+    const matched = selectBangumiMatch(subjects, {
+        titleCn: '目标作品 第2期',
+        titleJp: '対象作品 第2期',
+        airDate: '2026-07-06',
+    });
+    assert.equal(matched.id, 20);
 });

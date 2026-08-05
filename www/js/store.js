@@ -78,13 +78,17 @@ export function getCurrentAnime() {
     return getAnimeById(state.currentAnimeId);
 }
 
-export function addAnime(animeData) {
+export function addAnime(animeData, { navigate = true } = {}) {
     const now = new Date().toISOString();
     const initial = applyCompletionDate({ status: '', type: animeData.type }, animeData);
     const anime = normalizeAnimeRecord({ ...initial, id: generateId(), createdAt: now, updatedAt: now });
     const animeList = [...state.animeList, anime];
     if (!saveToStorage(animeList)) return false;
-    setState({ animeList, currentPage: 'list', currentAnimeId: null });
+    setState({
+        animeList,
+        ...(navigate ? { currentPage: 'list' } : {}),
+        currentAnimeId: null,
+    });
     return true;
 }
 

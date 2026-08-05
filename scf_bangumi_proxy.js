@@ -76,7 +76,7 @@ function proxyImage(url, origin) {
             port: 443,
             path: `${url.pathname}${url.search}`,
             method: 'GET',
-            headers: { 'User-Agent': 'AnimaList/1.2.0' },
+            headers: { 'User-Agent': 'AnimaList/1.2.1' },
         }, upstream => {
             const contentType = String(upstream.headers['content-type'] || '').split(';')[0];
             if (upstream.statusCode !== 200 || !/^image\/(?:jpeg|png|webp|gif)$/.test(contentType)) {
@@ -242,9 +242,27 @@ function parseStaff(staffHtml) {
 
 function parseYucPage(html, season) {
     const schedules = [];
+    const weekDayMarkers = [];
+    const weekDayMap = new Map([
+        ['周一', 1], ['周二', 2], ['周三', 3], ['周四', 4],
+        ['周五', 5], ['周六', 6], ['周日', 7],
+    ]);
+    const weekDayPattern = /<td[^>]*class=["'][^"']*date2[^"']*["'][^>]*>([\s\S]*?)<\/td>/gi;
+    let weekDayMatch;
+    while ((weekDayMatch = weekDayPattern.exec(html))) {
+        const label = htmlText(weekDayMatch[1]);
+        const weekDay = [...weekDayMap].find(([name]) => label.includes(name))?.[1] || 0;
+        if (weekDay) weekDayMarkers.push({ index: weekDayMatch.index, weekDay });
+    }
     const schedulePattern = /<div\s+style=["'][^"']*float\s*:\s*left[^"']*["'][^>]*>\s*<div[^>]*class=["'][^"']*div_date[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div>[\s\S]*?<td[^>]*class=["'][^"']*date_title_[^"']*["'][^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/table>/gi;
     let match;
+    let markerIndex = 0;
+    let sectionWeekDay = 0;
     while ((match = schedulePattern.exec(html))) {
+        while (markerIndex < weekDayMarkers.length && weekDayMarkers[markerIndex].index < match.index) {
+            sectionWeekDay = weekDayMarkers[markerIndex].weekDay;
+            markerIndex += 1;
+        }
         const dateBlock = match[1];
         const updateTime = htmlText(classContent(dateBlock, 'imgtext4') || classContent(dateBlock, 'imgtext5')).replace(/~.*$/, '').trim();
         const dateText = htmlText(classContent(dateBlock, 'imgep'));
@@ -257,7 +275,7 @@ function parseYucPage(html, season) {
             imageUrl,
             dateText,
             airDate,
-            updateWeekDay: weekDayFromDate(airDate),
+            updateWeekDay: sectionWeekDay || weekDayFromDate(airDate),
             updateTime: /^(?:[01]?\d|2\d):[0-5]\d$/.test(updateTime) ? updateTime.padStart(5, '0') : '',
             updatePeriod: updatePeriodFromTime(updateTime),
         });
@@ -338,7 +356,7 @@ function downloadYucPage(path, transport = https) {
             path,
             method: 'GET',
             headers: {
-                'User-Agent': 'AnimaList/1.2.0 (+local anime tracker)',
+                'User-Agent': 'AnimaList/1.2.1 (+local anime tracker)',
                 Accept: 'text/html,application/xhtml+xml',
                 'Accept-Encoding': 'identity',
             },
@@ -369,6 +387,7 @@ async function fetchYucAnime(event, origin) {
         .filter(value => typeof value === 'string' && value.length <= 300);
     if (titles.length === 0) return response(400, { error: 'Missing title' }, {}, origin);
     const season = yucSeasonFromDate(params.airDate);
+    if (season < '201910') return response(200, null, { 'Cache-Control': 'public, max-age=21600' }, origin);
     const path = `/${season}/`;
     const respondFromRecords = records => {
         const result = matchYucAnime(records, titles);
@@ -399,6 +418,14 @@ async function fetchYucSeason(event, origin) {
     const params = { ...(event.queryStringParameters || {}), ...(event.queryString || {}) };
     const season = String(params.season || '');
     if (!isYucSeason(season)) return response(400, { error: 'Invalid season' }, {}, origin);
+    if (season < '201910') {
+        return response(200, {
+            source: 'yuc.wiki',
+            season,
+            sourceUrl: '',
+            records: [],
+        }, { 'Cache-Control': 'public, max-age=21600' }, origin);
+    }
     const cached = yucPageCache.get(season);
     if (cached?.expiresAt > Date.now()) {
         return response(200, {
@@ -486,7 +513,7 @@ exports.main_handler = async event => {
             path: targetPath,
             method,
             headers: {
-                'User-Agent': 'AnimaList/1.2.0',
+                'User-Agent': 'AnimaList/1.2.1',
                 ...(method === 'POST' ? {
                     'Content-Type': 'application/json',
                     'Content-Length': Buffer.byteLength(body),

@@ -81,6 +81,15 @@ if (!webSource.includes('getYucAnime') || !webSource.includes('formUpdateTime'))
 if (!webSource.includes('getYucSeasonList') || !webSource.includes('yucScheduleBtn') || !webSource.includes("case 'yucSchedule'")) {
     throw new Error('前端缺少季度新番表入口或数据加载逻辑');
 }
+if (!webSource.includes('yucYearFilter') || !webSource.includes('yucQuarterFilter') || !webSource.includes("YUC_MIN_SEASON = '201910'")) {
+    throw new Error('新番表缺少年份/季度筛选器或 2019 年 10 月数据边界');
+}
+if (!webSource.includes('searchBangumiForYuc') || !webSource.includes('bgmId: bangumi?.id') || !webSource.includes('{ navigate: false }')) {
+    throw new Error('新番表添加未保留页面或未通过 Bangumi 匹配元数据');
+}
+if (!webSource.includes('yuc-weekday-section') || !webSource.includes('record.imageUrl')) {
+    throw new Error('新番表缺少按星期分组或 yuc.wiki 番剧图片');
+}
 if (!electronMain.includes("preload: path.join(__dirname, 'preload.cjs')") || !webSource.includes('animaListDesktop')) {
     throw new Error('Electron 缺少端侧 yuc 页面抓取桥接');
 }

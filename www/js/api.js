@@ -3,6 +3,7 @@ import { safeImageUrl } from './utils.js';
 import {
     getYucAnimeDirect,
     getYucSeasonList as fetchYucSeasonList,
+    hasYucSeasonData,
     updatePeriodFromBroadcast,
     updatePeriodFromTime,
     yucSeasonFromDate,
@@ -240,16 +241,75 @@ async function cachedRequest(key, loader, ttlMs) {
 }
 
 export async function searchBangumi(keyword, { signal } = {}) {
+    return searchBangumiAt(keyword, { signal });
+}
+
+async function searchBangumiAt(keyword, { signal, endpoint } = {}) {
     const normalized = String(keyword || '').trim();
     if (!normalized) return [];
-    const data = await apiFetchWithEncodingFallback('/v0/search/subjects', {
+    const requestOptions = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword: normalized, filter: { type: [2] }, limit: 8 }),
         signal,
-    });
+    };
+    const explicitBase = API_PROXIES[endpoint];
+    let data;
+    if (explicitBase) {
+        data = await apiFetch(`${explicitBase}/v0/search/subjects`, requestOptions);
+        if (explicitBase !== API_PROXIES.direct && hasBrokenEncoding(data)) {
+            const directOptions = { ...requestOptions };
+            delete directOptions.signal;
+            data = await apiFetch(`${API_PROXIES.direct}/v0/search/subjects`, directOptions, { retries: 0 });
+        }
+    } else {
+        data = await apiFetchWithEncodingFallback('/v0/search/subjects', requestOptions);
+    }
     return (Array.isArray(data?.data) ? data.data : [])
         .filter(item => item && typeof item === 'object' && item.type === 2);
+}
+
+function normalizedAnimeTitle(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .toLocaleLowerCase('zh-CN')
+        .replace(/(?:第\s*[\d一二三四五六七八九十]+\s*[季期]|season\s*\d+|part\.?\s*\d+)/gi, '')
+        .replace(/[\p{P}\p{S}\s]/gu, '');
+}
+
+export function selectBangumiMatch(subjects, { title = '', titleCn = '', titleJp = '', airDate = '' } = {}) {
+    const requested = [titleJp, titleCn, title].map(normalizedAnimeTitle).filter(Boolean);
+    let best = null;
+    for (const subject of Array.isArray(subjects) ? subjects : []) {
+        const candidates = [subject?.name, subject?.name_cn].map(normalizedAnimeTitle).filter(Boolean);
+        let score = 0;
+        for (const left of requested) {
+            for (const right of candidates) {
+                if (left === right) score = Math.max(score, 100);
+                else if (Math.min(left.length, right.length) >= 4 && (left.includes(right) || right.includes(left))) {
+                    score = Math.max(score, 78);
+                }
+            }
+        }
+        if (airDate && subject?.date === airDate) score += 15;
+        else if (airDate && subject?.date && subject.date.slice(0, 7) === airDate.slice(0, 7)) score += 5;
+        if (!best || score > best.score) best = { score, subject };
+    }
+    return best?.score >= 78 ? best.subject : null;
+}
+
+export async function searchBangumiForYuc(record, { signal } = {}) {
+    const title = record?.titleCn || record?.title || record?.titleJp || '';
+    const titleJp = record?.titleJp || '';
+    const keyword = titleJp || title;
+    if (!keyword) return null;
+    const subjects = await searchBangumiAt(keyword, { signal, endpoint: 'proxy1' });
+    return selectBangumiMatch(subjects, {
+        title,
+        titleCn: record?.titleCn,
+        titleJp,
+        airDate: record?.schedule?.airDate,
+    });
 }
 
 export function getBangumiSubject(id) {
@@ -288,6 +348,7 @@ export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airD
     if (titleJp) query.set('titleJp', String(titleJp).slice(0, 300));
     if (airDate) query.set('airDate', String(airDate).slice(0, 10));
     if (![...query.keys()].some(key => key.startsWith('title'))) return null;
+    if (airDate && !hasYucSeasonData(airDate)) return null;
 
     try {
         const direct = await getYucAnimeDirect({ title, titleCn, titleJp, airDate });

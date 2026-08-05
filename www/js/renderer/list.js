@@ -8,6 +8,7 @@ import { buildGroups } from '../grouping.js';
 import { getFilteredAnime, state } from '../store.js';
 import { loadCollapsed } from '../storage.js';
 import { escHtml, renderStars, safeImageUrl } from '../utils.js';
+import { hasYucSeasonData } from '../yuc.js';
 
 /** 渲染列表页 */
 export function renderListPage() {
@@ -181,6 +182,7 @@ function renderAnimeCard(anime) {
         : 0;
     const statusConfig = STATUS_CONFIG[anime.status] || STATUS_CONFIG.want;
     const typeLabel = TYPE_CONFIG[anime.type]?.label || '';
+    const showYucTime = hasYucSeasonData(anime.airDate);
 
     if (state.settings.listStyle === 'cover') {
         const cachedCover = getCachedCover(anime.bgmId);
@@ -199,7 +201,7 @@ function renderAnimeCard(anime) {
                     <div class="card-title">${escHtml(anime.title)}</div>
                     <div class="card-meta">
                         <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
-                        ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>` : ''}
+                        ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${showYucTime && anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${showYucTime && anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>` : ''}
                     </div>
                     <div class="card-progress-cover">
                         <span class="progress-text">${anime.currentEpisode}/${anime.totalEpisodes}</span>
@@ -222,7 +224,7 @@ function renderAnimeCard(anime) {
                 </div>
                 <div class="card-meta">
                     <span class="status-badge ${statusConfig.class}">${statusConfig.label}</span>
-                    ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>` : ''}
+                    ${anime.type === 'chasing' && anime.updateWeekDay ? `<span class="weekday-tag">${WEEK_DAYS[anime.updateWeekDay]}${showYucTime && anime.updateTime ? ` ${escHtml(anime.updateTime)}` : ''}${showYucTime && anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''}</span>` : ''}
                     <div class="card-stars">
                         ${renderStars(anime.rating)}
                     </div>

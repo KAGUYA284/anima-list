@@ -39,3 +39,15 @@ test('binge completion dates are recorded and cleared with completion state', ()
     assert.equal(updateAnime(id, { currentEpisode: 11, status: 'watching' }), true);
     assert.equal(getAnimeById(id).completedDate, '');
 });
+
+test('adding from the seasonal schedule can preserve the current page', () => {
+    setState({ currentPage: 'yucSchedule' });
+    assert.equal(addAnime({
+        title: 'Season schedule test',
+        type: 'chasing',
+        status: 'want',
+        bgmId: '12345',
+    }, { navigate: false }), true);
+    assert.equal(state.currentPage, 'yucSchedule');
+    assert.equal(state.animeList.at(-1).bgmId, '12345');
+});

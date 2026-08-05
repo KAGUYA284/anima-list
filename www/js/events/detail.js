@@ -6,6 +6,7 @@ import { changeProgress } from '../core.js';
 import { getBangumiCharacters, getBangumiImageUrl, getBangumiSubject, getYucAnime, hydrateBangumiImages } from '../api.js';
 import { deleteAnime, getAnimeById, getCurrentAnime, setState, state, updateAnime } from '../store.js';
 import { escHtml, safeImageUrl } from '../utils.js';
+import { hasYucSeasonData } from '../yuc.js';
 
 /** 绑定详情页事件 */
 export function attachDetailEvents() {
@@ -85,6 +86,10 @@ export function attachDetailEvents() {
 async function loadYucDetailInto(anime) {
     const container = document.getElementById('yucDetail');
     if (!container) return;
+    if (!hasYucSeasonData(anime.airDate)) {
+        container.innerHTML = '';
+        return;
+    }
     container.innerHTML = '<div class="bgm-loading">正在匹配长门有希制作信息...</div>';
 
     let subject = null;
