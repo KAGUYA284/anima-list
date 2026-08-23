@@ -3,10 +3,11 @@
 // ============================================================
 
 import { clearAnimeList, setState, state, updateSettings } from '../store.js';
+import { SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from '../constants.js';
 import { showToast } from '../utils.js';
 import { buildExportFilter } from './io.js';
 import {
-    getSyncStatus, login, logout, normalizeSyncApiUrl, register, resolveConflict, syncNow,
+    getSyncStatus, login, logout, register, resolveConflict, syncNow,
 } from '../sync-service.js';
 
 /** 绑定设置页事件 */
@@ -107,22 +108,6 @@ export function attachSettingsEvents() {
         if (clearAnimeList()) showToast('已清空所有番剧');
     });
 
-    const syncApiUrl = document.getElementById('syncApiUrl');
-    const commitSyncApiUrl = () => {
-        if (!syncApiUrl) return state.settings.syncApiUrl || '';
-        const value = normalizeSyncApiUrl(syncApiUrl.value);
-        if (value !== state.settings.syncApiUrl) updateSettings({ syncApiUrl: value }, { render: false });
-        return value;
-    };
-    syncApiUrl?.addEventListener('change', () => {
-        try {
-            commitSyncApiUrl();
-        } catch (error) {
-            showToast(error.message);
-            syncApiUrl.value = state.settings.syncApiUrl || '';
-        }
-    });
-
     const credentials = () => ({
         email: document.getElementById('syncEmail')?.value.trim() || '',
         password: document.getElementById('syncPassword')?.value || '',
@@ -130,9 +115,12 @@ export function attachSettingsEvents() {
     document.getElementById('syncRegisterBtn')?.addEventListener('click', async event => {
         const button = event.currentTarget;
         const { email, password } = credentials();
-        if (password.length < 12 || password.length > 128) { showToast('密码必须为 12–128 个字符'); return; }
+        if (password.length < SYNC_PASSWORD_MIN_LENGTH || password.length > SYNC_PASSWORD_MAX_LENGTH) {
+            showToast(`密码必须为 ${SYNC_PASSWORD_MIN_LENGTH}–${SYNC_PASSWORD_MAX_LENGTH} 个字符`);
+            return;
+        }
         button.disabled = true;
-        try { commitSyncApiUrl(); await register(email, password); showToast('注册成功，请使用该账号登录'); }
+        try { await register(email, password); showToast('注册成功，请使用该账号登录'); }
         catch (error) { showToast(error.message); }
         finally { if (document.contains(button)) button.disabled = false; }
     });
@@ -140,7 +128,7 @@ export function attachSettingsEvents() {
         const button = event.currentTarget;
         const { email, password } = credentials();
         button.disabled = true;
-        try { commitSyncApiUrl(); await login(email, password); setState({}); setTimeout(() => syncNow().catch(() => {}), 0); }
+        try { await login(email, password); setState({}); setTimeout(() => syncNow().catch(() => {}), 0); }
         catch (error) { showToast(error.message); if (document.contains(button)) button.disabled = false; }
     });
     document.getElementById('syncLogoutBtn')?.addEventListener('click', async () => {

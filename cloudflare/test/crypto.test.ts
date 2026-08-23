@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { hashPassword, verifyPassword } from '../src/services/password';
+import { hashPassword, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, verifyPassword } from '../src/services/password';
 import { signAccessToken, verifyAccessToken } from '../src/services/jwt';
 
 describe('password security', () => {
+    it('uses the configured 8–128 character password range', () => {
+        expect(PASSWORD_MIN_LENGTH).toBe(8);
+        expect(PASSWORD_MAX_LENGTH).toBe(128);
+    });
     it('uses random salts and verifies PBKDF2 hashes', async () => {
         const first = await hashPassword('a-strong-password', 1000);
         const second = await hashPassword('a-strong-password', 1000);

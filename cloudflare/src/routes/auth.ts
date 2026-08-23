@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppEnv, UserRow } from '../types';
-import { hashPassword, verifyPassword } from '../services/password';
+import { hashPassword, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, verifyPassword } from '../services/password';
 import { ACCESS_TOKEN_SECONDS, signAccessToken } from '../services/jwt';
 import { rateLimit } from '../middleware/rateLimit';
 import { requireAuth } from '../middleware/auth';
@@ -22,7 +22,7 @@ function normalizeCredentials(value: Record<string, unknown>) {
     const email = String(value.email || '').trim().toLowerCase();
     const password = String(value.password || '');
     if (!EMAIL_PATTERN.test(email) || email.length > 254) throw new Error('INVALID_EMAIL');
-    if (password.length < 12 || password.length > 128) throw new Error('INVALID_PASSWORD');
+    if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) throw new Error('INVALID_PASSWORD');
     return { email, password };
 }
 

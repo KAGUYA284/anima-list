@@ -3,6 +3,7 @@ android/.gradle/
 .wrangler/
 cloudflare/wrangler.toml
 cloudflare/.dev.vars*
+cloudflare/*backup.sql
 android/build/
 android/app/build/
 android/local.properties

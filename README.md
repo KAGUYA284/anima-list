@@ -56,7 +56,8 @@
 
 ## 跨端云同步
 
-设置页的“云同步”区域可填写已部署的 Worker 根地址并注册或登录。Web 的 MVP Token 保存在
+生产 Worker 地址已写入共享配置，设置页的“云同步”区域只需注册或登录。注册密码要求为
+8–128 个字符。Web 的 MVP Token 保存在
 localStorage；Electron 使用系统凭据加密能力保存到独立文件；Android 使用 Android Keystore
 生成的 AES-GCM 密钥保存密文。所有平台共享 `sync-service.js` 的 revision 同步状态机。
 
@@ -64,8 +65,8 @@ localStorage；Electron 使用系统凭据加密能力保存到独立文件；An
 `revision`：云端领先且本地未修改时下载，修订号一致且本地有修改时上传，双方同时修改则
 显示冲突面板，必须明确选择云端、本地覆盖或导出双方 JSON，不按客户端时间静默覆盖。
 
-Worker 部署、D1 迁移和密钥配置见 [cloudflare/README.md](cloudflare/README.md)。仓库不包含
-生产数据库 ID、域名或 JWT 密钥；未配置服务地址时应用继续完全离线使用。
+Worker 部署、D1 迁移和密钥配置见 [cloudflare/README.md](cloudflare/README.md)。应用固定连接
+`https://anima-list-api.anima-list-api.workers.dev`；实际 D1 ID 与 JWT 密钥仍不进入仓库。
 
 代理仅访问固定的 `yuc.wiki` 主机和季度路径，并把远端 HTML 解析成白名单纯文本字段，
 不会执行或向客户端透传页面脚本。当前该站 HTTPS 证书已过期，因此代理暂时从同一

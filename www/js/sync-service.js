@@ -1,4 +1,4 @@
-import { APP_VERSION, SCHEMA_VERSION } from './constants.js';
+import { APP_VERSION, SCHEMA_VERSION, SYNC_API_URL } from './constants.js';
 import { readBackup } from './data.js';
 import { secureTokenStorage } from './secure-storage.js';
 import { replaceAnimeList, state } from './store.js';
@@ -39,8 +39,7 @@ export function normalizeSyncApiUrl(value) {
 }
 
 async function apiRequest(path, options = {}) {
-    const base = normalizeSyncApiUrl(state.settings.syncApiUrl);
-    if (!base) throw new Error('请先填写云同步服务地址');
+    const base = normalizeSyncApiUrl(SYNC_API_URL);
     const token = await secureTokenStorage.getToken();
     const headers = { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -181,7 +180,7 @@ export async function resolveConflict(choice, conflict = syncStatus.conflict) {
 
 export function scheduleAutoSync() {
     clearTimeout(autoSyncTimer);
-    if (!state.settings.syncApiUrl || !getStoredUser()) return;
+    if (!getStoredUser()) return;
     autoSyncTimer = setTimeout(() => syncNow().catch(() => {}), 1500);
 }
 

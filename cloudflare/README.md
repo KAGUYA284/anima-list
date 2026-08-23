@@ -1,6 +1,6 @@
 # Anima List 云同步服务
 
-本目录是独立的 Cloudflare Workers + Hono + D1 TypeScript 服务。客户端未配置服务地址时仍可离线使用。
+本目录是独立的 Cloudflare Workers + Hono + D1 TypeScript 服务。发布客户端固定连接生产 Worker；服务不可用时本地番剧数据仍可离线使用。
 
 ## 本地验证
 
@@ -12,7 +12,7 @@ npx wrangler d1 migrations apply anima-list-development --local
 npx wrangler dev
 ```
 
-将应用设置中的服务地址设为 Wrangler 输出的本机地址。HTTP 仅允许 `localhost` 与 `127.0.0.1`。
+本地联调如需连接 Wrangler 地址，可临时修改 `www/js/constants.js` 中的 `SYNC_API_URL`；提交及发布前必须恢复生产 HTTPS 地址。HTTP 仅允许 `localhost` 与 `127.0.0.1`。
 
 ## 创建并部署环境
 
@@ -38,6 +38,7 @@ npx wrangler deploy
 ## 安全与同步约束
 
 - 密码为 PBKDF2-HMAC-SHA-256、每用户 16 字节随机盐、210,000 次迭代、32 字节派生值。
+- 注册密码长度限制为 8–128 个字符，客户端与 Worker 使用同一范围。
 - MVP 使用 7 天 Access Token；JWT 校验签名、`iss`、`aud`、`exp` 与数据库 `token_version`。
 - `POST /api/auth/logout-all` 会递增 `token_version`，使全部旧 Token 失效。
 - Worker 不记录密码、哈希、Token 或请求体；认证路由带实例内基础限流。

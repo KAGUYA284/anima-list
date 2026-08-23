@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decideSyncAction } from '../www/js/sync-core.js';
+import { SYNC_API_URL, SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from '../www/js/constants.js';
+
+test('production sync configuration is fixed and uses the shared password range', () => {
+    assert.equal(SYNC_API_URL, 'https://anima-list-api.anima-list-api.workers.dev');
+    assert.equal(SYNC_PASSWORD_MIN_LENGTH, 8);
+    assert.equal(SYNC_PASSWORD_MAX_LENGTH, 128);
+});
 
 test('sync decisions use revision and dirty state instead of client clocks', () => {
     assert.equal(decideSyncAction({ remoteRevision: 0, localRevision: 0, localDirty: true, localCount: 2 }), 'upload');

@@ -22,6 +22,9 @@ export const LAST_REVISION_KEY = 'ANIMA_LAST_REVISION';
 export const LOCAL_DIRTY_KEY = 'ANIMA_LOCAL_DIRTY';
 export const DATA_VERSION_KEY = 'ANIMA_DATA_VERSION';
 export const LAST_SYNCED_HASH_KEY = 'ANIMA_LAST_SYNCED_HASH';
+export const SYNC_API_URL = 'https://anima-list-api.anima-list-api.workers.dev';
+export const SYNC_PASSWORD_MIN_LENGTH = 8;
+export const SYNC_PASSWORD_MAX_LENGTH = 128;
 export const SCHEMA_VERSION = 2;
 export const APP_VERSION = '1.3.0';
 

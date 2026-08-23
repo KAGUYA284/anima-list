@@ -1,6 +1,8 @@
 import { base64UrlToBytes, bytesToBase64Url, constantTimeEqual } from './encoding';
 
 export const PASSWORD_ITERATIONS = 210_000;
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 128;
 const encoder = new TextEncoder();
 
 async function derive(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {

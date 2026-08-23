@@ -115,13 +115,18 @@ if (!webSource.includes('anime-swipe-actions') || !webSource.includes('data-card
 if (!syncService.includes('baseRevision') || !syncService.includes('SyncConflictError') || !webSource.includes('ANIMA_LOCAL_DIRTY')) {
     throw new Error('客户端缺少 revision/dirty 同步或显式冲突处理');
 }
+if (!webSource.includes("SYNC_API_URL = 'https://anima-list-api.anima-list-api.workers.dev'") || webSource.includes('id="syncApiUrl"')) {
+    throw new Error('生产同步地址未固定，或设置页仍允许用户修改服务地址');
+}
 if (!electronMain.includes("ipcMain.handle('sync.fetch'") || !electronMain.includes('safeStorage.encryptString')) {
     throw new Error('Electron 缺少受限同步请求或系统凭据加密');
 }
 if (!androidSecureStorage.includes('AndroidKeyStore') || !androidSecureStorage.includes('AES/GCM/NoPadding')) {
     throw new Error('Android Token 未使用 Keystore AES-GCM 安全存储');
 }
-if (!workerPassword.includes('PBKDF2') || !workerPassword.includes('210_000') || !workerJwt.includes("iss: ISSUER")) {
+if (!workerPassword.includes('PBKDF2') || !workerPassword.includes('210_000')
+    || !workerPassword.includes('PASSWORD_MIN_LENGTH = 8') || !workerPassword.includes('PASSWORD_MAX_LENGTH = 128')
+    || !workerJwt.includes("iss: ISSUER")) {
     throw new Error('Worker 缺少 PBKDF2 密码保护或完整 JWT 声明');
 }
 if (!workerSync.includes('WHERE user_id = ? AND revision = ?') || !workerSync.includes("code: 'SYNC_CONFLICT'")) {

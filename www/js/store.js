@@ -8,10 +8,9 @@ export const DEFAULT_SETTINGS = {
     apiEndpoint: 'direct',
     showAnimeDetails: true,
     listOrder: 'time',
-    syncApiUrl: '',
 };
 
-const { updateSource: _legacyUpdateSource, ...storedSettings } = loadSettings();
+const { updateSource: _legacyUpdateSource, syncApiUrl: _legacySyncApiUrl, ...storedSettings } = loadSettings();
 
 let renderCallback = () => {};
 

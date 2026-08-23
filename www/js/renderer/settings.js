@@ -2,7 +2,7 @@
 // 渲染层 · 设置页 - Anime Tracker
 // ============================================================
 
-import { APP_VERSION } from '../constants.js';
+import { APP_VERSION, SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from '../constants.js';
 import { state } from '../store.js';
 import { getStoredUser, getSyncStatus } from '../sync-service.js';
 import { escHtml } from '../utils.js';
@@ -105,10 +105,6 @@ export function renderSettingsPage() {
             <div class="settings-section">
                 <h2 class="settings-section-title">云同步</h2>
                 <div class="sync-settings-stack">
-                    <label class="sync-field">
-                        <span class="settings-label">服务地址</span>
-                        <input class="form-input" id="syncApiUrl" type="url" placeholder="https://anima-list-api.example.workers.dev" value="${escHtml(state.settings.syncApiUrl || '')}">
-                    </label>
                     ${syncUser ? `
                         <div class="settings-row">
                             <span class="settings-label">当前账号</span>
@@ -121,7 +117,7 @@ export function renderSettingsPage() {
                         </div>
                     ` : `
                         <label class="sync-field"><span class="settings-label">邮箱</span><input class="form-input" id="syncEmail" type="email" autocomplete="username" maxlength="254"></label>
-                        <label class="sync-field"><span class="settings-label">密码</span><input class="form-input" id="syncPassword" type="password" autocomplete="current-password" minlength="12" maxlength="128" placeholder="12–128 个字符"></label>
+                        <label class="sync-field"><span class="settings-label">密码</span><input class="form-input" id="syncPassword" type="password" autocomplete="current-password" minlength="${SYNC_PASSWORD_MIN_LENGTH}" maxlength="${SYNC_PASSWORD_MAX_LENGTH}" placeholder="${SYNC_PASSWORD_MIN_LENGTH}–${SYNC_PASSWORD_MAX_LENGTH} 个字符"></label>
                         <div class="sync-actions">
                             <button class="btn btn-primary" id="syncLoginBtn">登录</button>
                             <button class="btn btn-secondary" id="syncRegisterBtn">注册</button>
