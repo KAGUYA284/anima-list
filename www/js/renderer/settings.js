@@ -92,7 +92,7 @@ export function renderSettingsPage() {
                         <button class="toggle-btn ${listOrder !== 'update' ? 'active' : ''}" data-list-order="time">时间次序</button>
                     </div>
                     <div class="settings-order-help" id="listOrderHelp" hidden>
-                        <strong>更新次序：</strong>从今天开始按星期轮转；同一天依次为上午、下午、晚间、深夜，同一时段按具体更新时间由早到晚。<br>
+                        <strong>更新次序：</strong>从昨天开始按最近更新日倒序（例如周三依次显示周二、周一、周日）；同一天优先显示较晚的时段和更新时间。<br>
                         <strong>时间次序：</strong>保持原有周一至周日的固定顺序。
                     </div>
                 </div>
@@ -107,6 +107,10 @@ export function renderSettingsPage() {
                 <div class="settings-row">
                     <span class="settings-label">导入数据</span>
                     <button class="btn btn-secondary" id="settingsImportBtn">选择导入</button>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-label">清空所有番剧</span>
+                    <button class="btn btn-danger-outline" id="clearAnimeListBtn" ${state.animeList.length ? '' : 'disabled'}>清空全部</button>
                 </div>
             </div>
 

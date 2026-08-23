@@ -1,15 +1,12 @@
-import { getYucSeasonList, searchBangumiForYuc } from '../api.js';
-import { YUC_MIN_SEASON, yucSeasonFromDate, yucSeasonLabel, yucSeasonStartDate } from '../yuc.js';
+import { getBangumiSubject, getYucSeasonList, searchBangumiForYuc } from '../api.js';
+import { YUC_MIN_SEASON, yucSeasonFromDate, yucSeasonLabel } from '../yuc.js';
 import { addAnime, setState, state } from '../store.js';
 import { escHtml, showToast } from '../utils.js';
 import { renderYucRecords } from '../renderer/yuc.js';
-
-function normalizeTitle(value) {
-    return String(value || '').normalize('NFKC').replace(/[\p{P}\p{S}\s]/gu, '').toLocaleLowerCase('zh-CN');
-}
+import { buildSeasonalAnime, findExistingSeasonalAnime, normalizeSeasonalTitle } from '../seasonal-import.js';
 
 function existingTitleSet() {
-    return new Set(state.animeList.map(anime => normalizeTitle(anime.title)).filter(Boolean));
+    return new Set(state.animeList.map(anime => normalizeSeasonalTitle(anime.title)).filter(Boolean));
 }
 
 export function attachYucEvents() {
@@ -49,35 +46,36 @@ export function attachYucEvents() {
                 const record = records[Number(button.dataset.yucAdd)];
                 if (!record) return;
                 const title = record.titleCn || record.title || record.titleJp;
-                if (!title || existingTitleSet().has(normalizeTitle(title))) {
+                if (!title || findExistingSeasonalAnime(state.animeList, record)) {
                     showToast('这部番剧已经在待看列表');
                     return;
                 }
                 button.disabled = true;
                 button.textContent = '匹配 Bangumi...';
-                const schedule = record.schedule || {};
                 let bangumi = null;
                 try {
                     bangumi = await searchBangumiForYuc(record);
+                    if (bangumi?.id) {
+                        bangumi = await getBangumiSubject(bangumi.id) || bangumi;
+                    }
                 } catch (error) {
                     console.warn('[Yuc] Bangumi 代理匹配失败', error);
                 }
-                const added = addAnime({
-                    title,
-                    totalEpisodes: bangumi?.total_episodes || 12,
-                    currentEpisode: 0,
-                    status: 'want',
-                    type: 'chasing',
-                    airDate: schedule.airDate || bangumi?.date || yucSeasonStartDate(season),
-                    updateWeekDay: schedule.updateWeekDay || '',
-                    updateTime: schedule.updateTime || '',
-                    updatePeriod: schedule.updatePeriod || '',
-                    bgmId: bangumi?.id ? String(bangumi.id) : '',
-                }, { navigate: false });
+                if (!bangumi?.id) {
+                    button.disabled = false;
+                    button.textContent = '加入待看';
+                    showToast('未匹配到 Bangumi 条目，暂未加入');
+                    return;
+                }
+                if (findExistingSeasonalAnime(state.animeList, record, bangumi)) {
+                    button.disabled = true;
+                    button.textContent = '已在待看列表';
+                    showToast('这部番剧已经在待看列表');
+                    return;
+                }
+                const added = addAnime(buildSeasonalAnime(record, bangumi, season), { navigate: false });
                 if (added) {
-                    showToast(bangumi
-                        ? `已加入待看并匹配 Bangumi：${title}`
-                        : `已加入待看：${title}（未匹配到 Bangumi 信息）`);
+                    showToast(`已从 Bangumi 导入待看：${bangumi.name_cn || bangumi.name || title}`);
                 } else {
                     button.disabled = false;
                     button.textContent = '加入待看';

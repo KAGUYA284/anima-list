@@ -4,7 +4,7 @@
 
 import { changeProgress } from '../core.js';
 import { getYucAnime } from '../api.js';
-import { getAnimeById, setState, state, updateAnime } from '../store.js';
+import { deleteAnime, getAnimeById, setState, state, updateAnime } from '../store.js';
 import { loadCollapsed, saveCollapsed } from '../storage.js';
 import { loadListCovers } from '../renderer/list.js';
 import { render } from '../renderer/index.js';
@@ -154,9 +154,12 @@ export function attachListEvents() {
     const yucScheduleBtn = document.getElementById('yucScheduleBtn');
     if (yucScheduleBtn) yucScheduleBtn.addEventListener('click', () => setState({ currentPage: 'yucSchedule' }));
 
+    attachSwipeActions();
+
     // 番剧卡片点击 → 详情页
     document.querySelectorAll('.anime-card').forEach(card => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', event => {
+            if (card.dataset.swipeMoved === 'true' || event.target.closest('button')) return;
             const id = card.dataset.id;
             setState({ currentPage: 'detail', currentAnimeId: id });
         });
@@ -181,4 +184,69 @@ export function attachListEvents() {
         setTimeout(() => loadListCovers(), 100);
     }
     setTimeout(() => syncYucSchedules(), 0);
+}
+
+function attachSwipeActions() {
+    let openRow = null;
+    document.querySelectorAll('.anime-swipe-row').forEach(row => {
+        const card = row.querySelector('.anime-card');
+        if (!card) return;
+        let startX = 0;
+        let startY = 0;
+        let dragging = false;
+        let moved = false;
+        const close = () => {
+            row.classList.remove('swipe-open');
+            if (openRow === row) openRow = null;
+        };
+        card.addEventListener('pointerdown', event => {
+            if (event.button !== undefined && event.button !== 0) return;
+            if (openRow && openRow !== row) openRow.classList.remove('swipe-open');
+            startX = event.clientX;
+            startY = event.clientY;
+            dragging = true;
+            moved = false;
+            card.setPointerCapture?.(event.pointerId);
+        });
+        card.addEventListener('pointermove', event => {
+            if (!dragging) return;
+            const dx = event.clientX - startX;
+            const dy = event.clientY - startY;
+            if (Math.abs(dx) < 8 || Math.abs(dx) <= Math.abs(dy)) return;
+            moved = true;
+            card.style.transform = `translateX(${Math.max(-112, Math.min(0, dx))}px)`;
+        });
+        const finish = event => {
+            if (!dragging) return;
+            dragging = false;
+            const dx = event.clientX - startX;
+            card.style.transform = '';
+            if (moved && dx < -44) {
+                row.classList.add('swipe-open');
+                openRow = row;
+            } else if (moved || dx > 20) {
+                close();
+            }
+            if (moved) {
+                card.dataset.swipeMoved = 'true';
+                setTimeout(() => { delete card.dataset.swipeMoved; }, 0);
+            }
+        };
+        card.addEventListener('pointerup', finish);
+        card.addEventListener('pointercancel', finish);
+    });
+
+    document.querySelectorAll('[data-card-edit]').forEach(button => {
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            setState({ currentPage: 'edit', currentAnimeId: button.dataset.cardEdit });
+        });
+    });
+    document.querySelectorAll('[data-card-delete]').forEach(button => {
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            const anime = getAnimeById(button.dataset.cardDelete);
+            if (anime && confirm(`确定要删除《${anime.title}》吗？此操作不可撤销。`)) deleteAnime(anime.id);
+        });
+    });
 }

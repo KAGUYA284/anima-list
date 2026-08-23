@@ -93,8 +93,17 @@ if (!webSource.includes('getYucSeasonList') || !webSource.includes('yucScheduleB
 if (!webSource.includes('yucYearFilter') || !webSource.includes('yucQuarterFilter') || !webSource.includes("YUC_MIN_SEASON = '201910'")) {
     throw new Error('新番表缺少年份/季度筛选器或 2019 年 10 月数据边界');
 }
-if (!webSource.includes('searchBangumiForYuc') || !webSource.includes('bgmId: bangumi?.id') || !webSource.includes('{ navigate: false }')) {
+if (!webSource.includes('searchBangumiForYuc') || !webSource.includes('buildSeasonalAnime') || !webSource.includes("bgmId: subject?.id ? String(subject.id) : ''") || !webSource.includes('{ navigate: false }')) {
     throw new Error('新番表添加未保留页面或未通过 Bangumi 匹配元数据');
+}
+if (!webSource.includes('findExistingSeasonalAnime') || !webSource.includes('getBangumiSubject(bangumi.id)')) {
+    throw new Error('新番表添加缺少 Bangumi 完整信息读取或 bgmId 去重');
+}
+if (!webSource.includes('clearAnimeListBtn') || !webSource.includes('clearAnimeList()')) {
+    throw new Error('设置页缺少清空所有番剧功能');
+}
+if (!webSource.includes('anime-swipe-actions') || !webSource.includes('data-card-edit') || !webSource.includes('data-card-delete')) {
+    throw new Error('主页番剧卡片缺少左滑编辑与删除操作');
 }
 if (!webSource.includes('yuc-weekday-section') || !webSource.includes('record.imageUrl')) {
     throw new Error('新番表缺少按星期分组或 yuc.wiki 番剧图片');

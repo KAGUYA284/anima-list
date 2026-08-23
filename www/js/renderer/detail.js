@@ -28,8 +28,12 @@ export function renderDetailPage() {
                     ← 返回
                 </button>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
-                    <button class="btn btn-icon" id="editAnime">✏️</button>
-                    <button class="btn btn-icon" id="deleteAnime" style="color:#f87171;">🗑️</button>
+                    <button class="btn btn-icon flat-action-icon" id="editAnime" title="编辑" aria-label="编辑">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5-5l2.1 2.1-2.4 2.4-2.1-2.1a4 4 0 0 0 5 5L4 17v3h3l8.3-8.3a4 4 0 0 0 5-5l-2.1 2.1-2.4-2.4 2.1-2.1a4 4 0 0 0-5 5Z"/></svg>
+                    </button>
+                    <button class="btn btn-icon flat-action-icon flat-action-delete" id="deleteAnime" title="删除" aria-label="删除">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                    </button>
                 </div>
             </div>
         </header>

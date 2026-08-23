@@ -2,7 +2,8 @@
 // 事件处理 · 设置页 - Anime Tracker
 // ============================================================
 
-import { setState, state, updateSettings } from '../store.js';
+import { clearAnimeList, setState, state, updateSettings } from '../store.js';
+import { showToast } from '../utils.js';
 import { buildExportFilter } from './io.js';
 
 /** 绑定设置页事件 */
@@ -87,4 +88,10 @@ export function attachSettingsEvents() {
             }
         });
     }
+
+    document.getElementById('clearAnimeListBtn')?.addEventListener('click', () => {
+        if (!state.animeList.length) return;
+        if (!confirm(`确定要清空全部 ${state.animeList.length} 部番剧吗？此操作不可撤销。`)) return;
+        if (clearAnimeList()) showToast('已清空所有番剧');
+    });
 }

@@ -116,6 +116,12 @@ export function replaceAnimeList(records) {
     return true;
 }
 
+export function clearAnimeList() {
+    if (!saveToStorage([])) return false;
+    setState({ animeList: [], currentPage: 'settings', currentAnimeId: null });
+    return true;
+}
+
 export function deleteAnime(id) {
     const animeList = state.animeList.filter(anime => anime.id !== id);
     if (!saveToStorage(animeList)) return false;

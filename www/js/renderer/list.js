@@ -181,7 +181,7 @@ function renderAnimeCard(anime) {
 
     if (state.settings.listStyle === 'cover') {
         const cachedCover = getCachedCover(anime.bgmId);
-        return `
+        return renderSwipeRow(anime, `
             <div class="anime-card anime-card-cover" data-id="${escHtml(anime.id)}" data-bgmid="${escHtml(anime.bgmId || '')}">
                 <div class="card-cover-thumb">
                     ${cachedCover
@@ -207,10 +207,10 @@ function renderAnimeCard(anime) {
                     ${anime.status !== 'dropped' && anime.status !== 'completed' ? `<button class="card-plus-one" data-plus="${escHtml(anime.id)}">+1</button>` : ''}
                 </div>
             </div>
-        `;
+        `);
     }
 
-    return `
+    return renderSwipeRow(anime, `
         <div class="anime-card" data-id="${escHtml(anime.id)}">
             <div class="card-info">
                 <div style="display:flex;align-items:center;gap:0.5rem;">
@@ -233,6 +233,23 @@ function renderAnimeCard(anime) {
                 </div>
                 ${anime.status !== 'dropped' && anime.status !== 'completed' ? `<button class="card-plus-one" data-plus="${escHtml(anime.id)}">+1</button>` : ''}
             </div>
+        </div>
+    `);
+}
+
+function renderSwipeRow(anime, cardHtml) {
+    const id = escHtml(anime.id);
+    return `
+        <div class="anime-swipe-row" data-swipe-id="${id}">
+            <div class="anime-swipe-actions" aria-label="${escHtml(anime.title)}操作">
+                <button class="anime-swipe-action anime-swipe-edit" type="button" data-card-edit="${id}" title="编辑" aria-label="编辑">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5-5l2.1 2.1-2.4 2.4-2.1-2.1a4 4 0 0 0 5 5L4 17v3h3l8.3-8.3a4 4 0 0 0 5-5l-2.1 2.1-2.4-2.4 2.1-2.1a4 4 0 0 0-5 5Z"/></svg>
+                </button>
+                <button class="anime-swipe-action anime-swipe-delete" type="button" data-card-delete="${id}" title="删除" aria-label="删除">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
+            ${cardHtml}
         </div>
     `;
 }

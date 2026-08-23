@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    addAnime, DEFAULT_SETTINGS, getAnimeById, getCurrentAnime, setRenderer, setState, state, updateAnime,
+    addAnime, clearAnimeList, DEFAULT_SETTINGS, getAnimeById, getCurrentAnime, setRenderer, setState, state, updateAnime,
 } from '../www/js/store.js';
 
 test('fresh settings default to cover mode and do not expose an update source', () => {
@@ -56,4 +56,11 @@ test('adding from the seasonal schedule can preserve the current page', () => {
     }, { navigate: false }), true);
     assert.equal(state.currentPage, 'yucSchedule');
     assert.equal(state.animeList.at(-1).bgmId, '12345');
+});
+
+test('clearing the anime list removes every record and stays in settings', () => {
+    assert.equal(addAnime({ title: 'Clear me', totalEpisodes: 1 }), true);
+    assert.equal(clearAnimeList(), true);
+    assert.equal(state.animeList.length, 0);
+    assert.equal(state.currentPage, 'settings');
 });
