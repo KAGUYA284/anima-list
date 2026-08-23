@@ -1,6 +1,6 @@
 {
   "name": "anima-list",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Anima List - 记录你的动漫观看进度",
   "author": "",
   "license": "MIT",
@@ -52,6 +52,8 @@
     "check:dist": "node scripts/check-dist.mjs",
     "test": "node tests/run-tests.mjs",
     "check": "npm run lint && npm run test && npm run build && npm run check:dist",
+    "cloud:install": "npm --prefix cloudflare install",
+    "cloud:check": "npm --prefix cloudflare run check",
     "android": "npx cap add android",
     "ios": "npx cap add ios",
     "sync": "npm run build && npm run check:dist && npx cap sync",

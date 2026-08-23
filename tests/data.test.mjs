@@ -49,7 +49,7 @@ test('readBackup supports legacy arrays and rejects invalid entries with a repor
 test('createBackup emits a versioned portable envelope', () => {
     const backup = createBackup([{ title: 'A' }]);
     assert.equal(backup.schemaVersion, 2);
-    assert.equal(backup.appVersion, '1.2.1');
+    assert.equal(backup.appVersion, '1.3.0');
     assert.equal(backup.records[0].title, 'A');
     assert.ok(backup.exportedAt);
 });

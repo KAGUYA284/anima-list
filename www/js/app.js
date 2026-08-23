@@ -1,6 +1,7 @@
 import { render, showReminder } from './renderer.js';
 import { setRenderer, setState, state } from './store.js';
 import { showToast } from './utils.js';
+import { scheduleAutoSync } from './sync-service.js';
 
 function safeRender() {
     try {
@@ -32,6 +33,7 @@ setTimeout(() => {
         console.error('[Reminder] 提醒计算失败', error);
     }
 }, 600);
+setTimeout(() => scheduleAutoSync(), 900);
 
 window.addEventListener('storage-error', () => {
     showToast('数据保存失败，请立即导出备份');

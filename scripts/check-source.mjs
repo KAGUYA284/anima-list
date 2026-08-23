@@ -26,6 +26,13 @@ const webLauncher = readFileSync('scripts/release/启动网页版.cmd', 'utf8');
 const webServer = readFileSync('scripts/release/server.ps1', 'utf8');
 const proxySource = readFileSync('scf_bangumi_proxy.js', 'utf8');
 const releasePackage = readFileSync('scripts/package-release.ps1', 'utf8');
+const syncService = readFileSync('www/js/sync-service.js', 'utf8');
+const workerPassword = readFileSync('cloudflare/src/services/password.ts', 'utf8');
+const workerJwt = readFileSync('cloudflare/src/services/jwt.ts', 'utf8');
+const workerSync = readFileSync('cloudflare/src/routes/sync.ts', 'utf8');
+const workerMigration = readFileSync('cloudflare/migrations/0001_initial.sql', 'utf8');
+const workerExample = readFileSync('cloudflare/wrangler.toml.example', 'utf8');
+const androidSecureStorage = readFileSync('android/app/src/main/java/com/animetracker/app/AnimaSecureStoragePlugin.java', 'utf8');
 // 拆分后前端逻辑分散在多个文件，故对整个 www/js 目录的拼接内容做断言，
 // 避免绑定到具体文件名（模块再拆分时不误报）。
 const webSource = sourceFiles
@@ -104,6 +111,27 @@ if (!webSource.includes('clearAnimeListBtn') || !webSource.includes('clearAnimeL
 }
 if (!webSource.includes('anime-swipe-actions') || !webSource.includes('data-card-edit') || !webSource.includes('data-card-delete')) {
     throw new Error('主页番剧卡片缺少左滑编辑与删除操作');
+}
+if (!syncService.includes('baseRevision') || !syncService.includes('SyncConflictError') || !webSource.includes('ANIMA_LOCAL_DIRTY')) {
+    throw new Error('客户端缺少 revision/dirty 同步或显式冲突处理');
+}
+if (!electronMain.includes("ipcMain.handle('sync.fetch'") || !electronMain.includes('safeStorage.encryptString')) {
+    throw new Error('Electron 缺少受限同步请求或系统凭据加密');
+}
+if (!androidSecureStorage.includes('AndroidKeyStore') || !androidSecureStorage.includes('AES/GCM/NoPadding')) {
+    throw new Error('Android Token 未使用 Keystore AES-GCM 安全存储');
+}
+if (!workerPassword.includes('PBKDF2') || !workerPassword.includes('210_000') || !workerJwt.includes("iss: ISSUER")) {
+    throw new Error('Worker 缺少 PBKDF2 密码保护或完整 JWT 声明');
+}
+if (!workerSync.includes('WHERE user_id = ? AND revision = ?') || !workerSync.includes("code: 'SYNC_CONFLICT'")) {
+    throw new Error('Worker 缺少 D1 条件写入或 409 冲突响应');
+}
+if (!workerMigration.includes('password_salt') || !workerMigration.includes('revision INTEGER') || !workerMigration.includes('FOREIGN KEY')) {
+    throw new Error('D1 初始化迁移缺少安全认证或同步修订字段');
+}
+if (workerExample.includes('JWT_SECRET =') || workerExample.includes('database_id = "REPLACE_WITH_D1_DATABASE_ID"') === false) {
+    throw new Error('Wrangler 示例泄漏 Secret 或未使用数据库 ID 占位符');
 }
 if (!webSource.includes('yuc-weekday-section') || !webSource.includes('record.imageUrl')) {
     throw new Error('新番表缺少按星期分组或 yuc.wiki 番剧图片');

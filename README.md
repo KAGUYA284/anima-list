@@ -5,11 +5,12 @@
 
 | 端 | 外壳 | 产物 |
 | --- | --- | --- |
-| Web | Vite 静态文件 + PowerShell 启动器 | `发布版本/v1.2.1/Web/` |
+| Web | Vite 静态文件 + PowerShell 启动器 | `发布版本/v1.3.0/Web/` |
 | Android / iOS | Capacitor | APK / IPA |
 | Windows 免安装版 | Electron | 正式无缓存包、缓存测试包 |
 | Windows 安装版 | Electron + NSIS | NSIS 安装程序 |
 | 番剧数据代理 | 腾讯云 SCF | Bangumi API/图片代理 + yuc.wiki 季度信息抓取 |
+| 云同步 API | Cloudflare Workers + Hono + D1 | 账号认证、JSON 快照、revision 冲突检测 |
 
 ## 目录速览
 
@@ -21,6 +22,7 @@
 - `scripts/` — 构建脚本（版本同步、产物校验、源码检查、发布密钥）
 - `tests/` — 基于 `node:test` 的单元测试
 - `docs/` — 累计工作说明、升级计划和架构分析
+- `cloudflare/` — TypeScript 云同步服务、D1 迁移、Wrangler 示例配置和测试
 - `发布版本/v<版本号>/` — 面向用户和测试人员的最终产物（Git 忽略）
 - `scf_bangumi_proxy.js` — Bangumi API/图片代理及 yuc.wiki 季度页解析（CORS/路径白名单、体积限制、缓存）
 
@@ -52,6 +54,19 @@
 集数、首播日期、更新星期、具体时间和时段，并把补全结果写回本地存储。单条查询失败不会
 撤销已经成功的导入。
 
+## 跨端云同步
+
+设置页的“云同步”区域可填写已部署的 Worker 根地址并注册或登录。Web 的 MVP Token 保存在
+localStorage；Electron 使用系统凭据加密能力保存到独立文件；Android 使用 Android Keystore
+生成的 AES-GCM 密钥保存密文。所有平台共享 `sync-service.js` 的 revision 同步状态机。
+
+本地每次修改都会写入 `ANIMA_LOCAL_DIRTY` 与 `ANIMA_LAST_UPDATED`。同步比较只使用服务端
+`revision`：云端领先且本地未修改时下载，修订号一致且本地有修改时上传，双方同时修改则
+显示冲突面板，必须明确选择云端、本地覆盖或导出双方 JSON，不按客户端时间静默覆盖。
+
+Worker 部署、D1 迁移和密钥配置见 [cloudflare/README.md](cloudflare/README.md)。仓库不包含
+生产数据库 ID、域名或 JWT 密钥；未配置服务地址时应用继续完全离线使用。
+
 代理仅访问固定的 `yuc.wiki` 主机和季度路径，并把远端 HTML 解析成白名单纯文本字段，
 不会执行或向客户端透传页面脚本。当前该站 HTTPS 证书已过期，因此代理暂时从同一
 固定主机的公开 HTTP 页面读取数据；应用到代理的连接仍使用 HTTPS。站点证书恢复后，
@@ -72,19 +87,21 @@ npm run desktop:preview# 打包并用 electron-builder 出便携版目录
 npm run desktop:installer# 打包并生成 Windows NSIS 安装程序
 npm run release:package# 将已构建产物整理为统一发布目录
 npm run release:all   # 检查并构建、整理 Windows / Android / Web 全部产物
+npm run cloud:install # 安装 Cloudflare Worker 锁定依赖
+npm run cloud:check   # Worker TypeScript 检查与测试
 ```
 
 ## 发布目录
 
-`npm run release:all` 完成后，当前版本统一放在 `发布版本/v1.2.1/`：
+`npm run release:all` 完成后，当前版本统一放在 `发布版本/v1.3.0/`：
 
 ```text
-发布版本/v1.2.1/
+发布版本/v1.3.0/
 ├─ Windows/
-│  ├─ 安装版/Anima-List-Setup-1.2.1.exe
-│  ├─ 免安装版/Anima List v1.2.1/（目录版）
-│  └─ 缓存测试版/Anima List v1.2.1 缓存测试版/（目录版）
-├─ Android/Anima-List-v1.2.1-signed.apk
+│  ├─ 安装版/Anima-List-Setup-1.3.0.exe
+│  ├─ 免安装版/Anima List v1.3.0/（目录版）
+│  └─ 缓存测试版/Anima List v1.3.0 缓存测试版/（目录版）
+├─ Android/Anima-List-v1.3.0-signed.apk
 ├─ Web/
 │  ├─ 启动网页版.cmd
 │  ├─ server.ps1
@@ -112,7 +129,7 @@ Local Storage 和 IndexedDB 固定保存在同目录的 `test-user-data/` 中；
 
 发布前按顺序执行：
 
-1. **改版本**：在 `package.json` 里更新 `version`（如 `1.2.0` → `1.2.1`）。
+1. **改版本**：在 `package.json` 里更新 `version`（如 `1.2.1` → `1.3.0`）。
 2. **递增 versionCode**：在 `android/app/build.gradle` 手动 +1。
 3. **同步版本号**：`npm run sync:version`（`prebuild` 也会自动跑）。
 4. **过门禁**：`npm run check` 全绿（lint + test + build + dist 校验）。

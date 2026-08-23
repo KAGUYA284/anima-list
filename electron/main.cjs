@@ -1,5 +1,5 @@
-const { existsSync } = require('node:fs');
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
+const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
+const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require('electron');
 const http = require('node:http');
 const path = require('node:path');
 
@@ -44,6 +44,41 @@ function fetchYucPage(season) {
 }
 
 ipcMain.handle('yuc.fetch', (_event, season) => fetchYucPage(season));
+
+function tokenFile() {
+    return path.join(app.getPath('userData'), 'auth-token.bin');
+}
+
+ipcMain.handle('secure-token.get', () => {
+    try {
+        if (!safeStorage.isEncryptionAvailable() || !existsSync(tokenFile())) return null;
+        return safeStorage.decryptString(readFileSync(tokenFile()));
+    } catch { return null; }
+});
+ipcMain.handle('secure-token.set', (_event, token) => {
+    if (!safeStorage.isEncryptionAvailable() || typeof token !== 'string' || token.length > 8192) return false;
+    writeFileSync(tokenFile(), safeStorage.encryptString(token));
+    return true;
+});
+ipcMain.handle('secure-token.remove', () => {
+    if (existsSync(tokenFile())) rmSync(tokenFile(), { force: true });
+    return true;
+});
+ipcMain.handle('sync.fetch', async (_event, rawUrl, options = {}) => {
+    const url = new URL(String(rawUrl || ''));
+    const localDevelopment = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
+    if (url.protocol !== 'https:' && !localDevelopment) throw new Error('同步服务仅允许 HTTPS');
+    if (!url.pathname.startsWith('/api/')) throw new Error('同步服务路径无效');
+    const method = ['GET', 'POST', 'PUT'].includes(options.method) ? options.method : 'GET';
+    const response = await fetch(url, {
+        method,
+        headers: options.headers && typeof options.headers === 'object' ? options.headers : {},
+        body: method === 'GET' ? undefined : String(options.body || ''),
+    });
+    const body = await response.text();
+    if (body.length > 2 * 1024 * 1024) throw new Error('同步服务响应过大');
+    return { status: response.status, ok: response.ok, body };
+});
 
 // 缓存测试版随包放置此标记文件。其浏览器缓存、Local Storage、IndexedDB
 // 等数据固定写入解压目录，便于携带和复现；正式便携版不放置该标记。

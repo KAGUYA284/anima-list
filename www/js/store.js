@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS = {
     apiEndpoint: 'direct',
     showAnimeDetails: true,
     listOrder: 'time',
+    syncApiUrl: '',
 };
 
 const { updateSource: _legacyUpdateSource, ...storedSettings } = loadSettings();
@@ -56,10 +57,10 @@ export function setState(updates, { render = true } = {}) {
     if (render) renderCallback();
 }
 
-export function updateSettings(updates) {
+export function updateSettings(updates, { render = true } = {}) {
     const settings = { ...state.settings, ...updates };
     saveSettings(settings);
-    setState({ settings });
+    setState({ settings }, { render });
 }
 
 export function getFilteredAnime() {
@@ -110,8 +111,8 @@ export function updateAnime(id, updates, { render = true } = {}) {
     return true;
 }
 
-export function replaceAnimeList(records) {
-    if (!saveToStorage(records)) return false;
+export function replaceAnimeList(records, { markDirty = true } = {}) {
+    if (!saveToStorage(records, { markDirty })) return false;
     setState({ animeList: records });
     return true;
 }

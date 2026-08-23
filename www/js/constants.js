@@ -15,8 +15,15 @@ export const STATUS_CONFIG = {
 export const STORAGE_KEY = 'anime-tracker-data';
 export const COLLAPSE_KEY = 'anime-tracker-collapse';
 export const SETTINGS_KEY = 'anime-tracker-settings';
+export const LEGACY_SYNC_DATA_KEY = 'ANIMA_LIST_DATA';
+export const LAST_UPDATED_KEY = 'ANIMA_LAST_UPDATED';
+export const AUTH_TOKEN_KEY = 'AUTH_TOKEN';
+export const LAST_REVISION_KEY = 'ANIMA_LAST_REVISION';
+export const LOCAL_DIRTY_KEY = 'ANIMA_LOCAL_DIRTY';
+export const DATA_VERSION_KEY = 'ANIMA_DATA_VERSION';
+export const LAST_SYNCED_HASH_KEY = 'ANIMA_LAST_SYNCED_HASH';
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.3.0';
 
 /** 日本动画季度边界定义（用于番剧按季归类） */
 export const QUARTER_BOUNDARIES = {

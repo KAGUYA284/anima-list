@@ -1,4 +1,7 @@
-import { COLLAPSE_KEY, SETTINGS_KEY, STORAGE_KEY } from './constants.js';
+import {
+    COLLAPSE_KEY, DATA_VERSION_KEY, LAST_UPDATED_KEY, LEGACY_SYNC_DATA_KEY,
+    LOCAL_DIRTY_KEY, SCHEMA_VERSION, SETTINGS_KEY, STORAGE_KEY,
+} from './constants.js';
 import { normalizeStoredRecords } from './data.js';
 
 function readJson(key, fallback) {
@@ -26,8 +29,17 @@ export function loadFromStorage() {
     return normalizeStoredRecords(readJson(STORAGE_KEY, []));
 }
 
-export function saveToStorage(data) {
-    return writeJson(STORAGE_KEY, data);
+export function saveToStorage(data, { markDirty = true } = {}) {
+    if (!writeJson(STORAGE_KEY, data)) return false;
+    // 同步方案要求保留的兼容键；主应用仍使用原键，避免升级后丢失既有数据。
+    writeJson(LEGACY_SYNC_DATA_KEY, data);
+    localStorage.setItem(DATA_VERSION_KEY, String(SCHEMA_VERSION));
+    if (markDirty) {
+        localStorage.setItem(LOCAL_DIRTY_KEY, 'true');
+        localStorage.setItem(LAST_UPDATED_KEY, String(Date.now()));
+        globalThis.window?.dispatchEvent?.(new CustomEvent('anime-data-dirty'));
+    }
+    return true;
 }
 
 export function loadCollapsed() {

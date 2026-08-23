@@ -1,0 +1,14 @@
+name = "anima-list-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "anima-list-development"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,capacitor://localhost,http://localhost"
+
+# JWT_SECRET 必须通过 `wrangler secret put JWT_SECRET` 设置，禁止写入本文件。

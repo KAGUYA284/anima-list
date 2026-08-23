@@ -4,6 +4,8 @@
 
 import { APP_VERSION } from '../constants.js';
 import { state } from '../store.js';
+import { getStoredUser, getSyncStatus } from '../sync-service.js';
+import { escHtml } from '../utils.js';
 
 /** 渲染设置页 */
 export function renderSettingsPage() {
@@ -12,6 +14,8 @@ export function renderSettingsPage() {
     const apiEndpoint = state.settings.apiEndpoint;
     const showAnimeDetails = state.settings.showAnimeDetails;
     const listOrder = state.settings.listOrder;
+    const syncUser = getStoredUser();
+    const syncStatus = getSyncStatus();
     return `
         <header class="header">
             <div class="header-content">
@@ -95,6 +99,46 @@ export function renderSettingsPage() {
                         <strong>更新次序：</strong>从昨天开始按最近更新日倒序（例如周三依次显示周二、周一、周日）；同一天优先显示较晚的时段和更新时间。<br>
                         <strong>时间次序：</strong>保持原有周一至周日的固定顺序。
                     </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2 class="settings-section-title">云同步</h2>
+                <div class="sync-settings-stack">
+                    <label class="sync-field">
+                        <span class="settings-label">服务地址</span>
+                        <input class="form-input" id="syncApiUrl" type="url" placeholder="https://anima-list-api.example.workers.dev" value="${escHtml(state.settings.syncApiUrl || '')}">
+                    </label>
+                    ${syncUser ? `
+                        <div class="settings-row">
+                            <span class="settings-label">当前账号</span>
+                            <span class="sync-account-email">${escHtml(syncUser.email || '已登录账号')}</span>
+                        </div>
+                        <div class="sync-status sync-status-${escHtml(syncStatus.phase)}" id="syncStatusText">${escHtml(syncStatus.message)}</div>
+                        <div class="sync-actions">
+                            <button class="btn btn-primary" id="syncNowBtn">立即同步</button>
+                            <button class="btn btn-secondary" id="syncLogoutBtn">退出登录</button>
+                        </div>
+                    ` : `
+                        <label class="sync-field"><span class="settings-label">邮箱</span><input class="form-input" id="syncEmail" type="email" autocomplete="username" maxlength="254"></label>
+                        <label class="sync-field"><span class="settings-label">密码</span><input class="form-input" id="syncPassword" type="password" autocomplete="current-password" minlength="12" maxlength="128" placeholder="12–128 个字符"></label>
+                        <div class="sync-actions">
+                            <button class="btn btn-primary" id="syncLoginBtn">登录</button>
+                            <button class="btn btn-secondary" id="syncRegisterBtn">注册</button>
+                        </div>
+                        <div class="sync-status" id="syncStatusText">Token 仅保存在当前设备的安全凭据存储中</div>
+                    `}
+                    ${syncStatus.phase === 'conflict' ? `
+                        <div class="sync-conflict-panel" id="syncConflictPanel">
+                            <strong>检测到多设备修改冲突</strong>
+                            <p>系统不会静默覆盖。请选择保留云端、本地覆盖云端，或先导出双方 JSON。</p>
+                            <div class="sync-actions">
+                                <button class="btn btn-secondary" id="syncUseRemoteBtn">使用云端</button>
+                                <button class="btn btn-secondary" id="syncUseLocalBtn">使用本地</button>
+                                <button class="btn btn-secondary" id="syncExportConflictBtn">导出双方 JSON</button>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
 

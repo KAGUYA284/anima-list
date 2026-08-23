@@ -1,5 +1,8 @@
 ﻿node_modules/
 android/.gradle/
+.wrangler/
+cloudflare/wrangler.toml
+cloudflare/.dev.vars*
 android/build/
 android/app/build/
 android/local.properties

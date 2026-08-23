@@ -23,6 +23,8 @@ test('the detail selection is derived from currentAnimeId and each update render
     assert.equal(renderCount, beforeUpdate + 1);
     assert.equal(getCurrentAnime().review, 'latest');
     assert.equal(state.currentAnimeId, id);
+    assert.equal(localStorage.getItem('ANIMA_LOCAL_DIRTY'), 'true');
+    assert.ok(Number(localStorage.getItem('ANIMA_LAST_UPDATED')) > 0);
 });
 
 test('binge completion dates are recorded and cleared with completion state', () => {
