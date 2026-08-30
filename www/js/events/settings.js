@@ -6,6 +6,7 @@ import { clearAnimeList, setState, state, updateSettings } from '../store.js';
 import { SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from '../constants.js';
 import { showToast } from '../utils.js';
 import { buildExportFilter } from './io.js';
+import { shouldRenderSyncConflictPanel } from '../sync-core.js';
 import {
     getSyncStatus, login, logout, register, resolveConflict, syncNow,
 } from '../sync-service.js';
@@ -15,9 +16,16 @@ export function attachSettingsEvents() {
     if (window.__animaSyncSettingsHandler) window.removeEventListener('sync-state-changed', window.__animaSyncSettingsHandler);
     window.__animaSyncSettingsHandler = event => {
         if (state.currentPage !== 'settings') return;
-        if (event.detail?.phase === 'conflict') { setState({}); return; }
+        const phase = event.detail?.phase || 'idle';
+        if (shouldRenderSyncConflictPanel(phase, document.getElementById('syncConflictPanel'))) {
+            setState({});
+            return;
+        }
         const status = document.getElementById('syncStatusText');
-        if (status) status.textContent = event.detail?.message || '';
+        if (status) {
+            status.textContent = event.detail?.message || '';
+            status.className = `sync-status sync-status-${phase}`;
+        }
     };
     window.addEventListener('sync-state-changed', window.__animaSyncSettingsHandler);
 

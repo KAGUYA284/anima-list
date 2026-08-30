@@ -1,6 +1,9 @@
 import { base64UrlToBytes, bytesToBase64Url, constantTimeEqual } from './encoding';
 
-export const PASSWORD_ITERATIONS = 210_000;
+// Cloudflare Workers WebCrypto rejects PBKDF2 iteration counts above 100,000.
+// Use the platform maximum so production registration and verification share
+// the strongest derivation cost supported by the runtime.
+export const PASSWORD_ITERATIONS = 100_000;
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 const encoder = new TextEncoder();

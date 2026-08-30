@@ -37,7 +37,7 @@ npx wrangler deploy
 
 ## 安全与同步约束
 
-- 密码为 PBKDF2-HMAC-SHA-256、每用户 16 字节随机盐、210,000 次迭代、32 字节派生值。
+- 密码为 PBKDF2-HMAC-SHA-256、每用户 16 字节随机盐、Cloudflare Workers 支持上限 100,000 次迭代、32 字节派生值。
 - 注册密码长度限制为 8–128 个字符，客户端与 Worker 使用同一范围。
 - MVP 使用 7 天 Access Token；JWT 校验签名、`iss`、`aud`、`exp` 与数据库 `token_version`。
 - `POST /api/auth/logout-all` 会递增 `token_version`，使全部旧 Token 失效。

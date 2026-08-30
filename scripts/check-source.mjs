@@ -118,13 +118,14 @@ if (!syncService.includes('baseRevision') || !syncService.includes('SyncConflict
 if (!webSource.includes("SYNC_API_URL = 'https://anima-list-api.anima-list-api.workers.dev'") || webSource.includes('id="syncApiUrl"')) {
     throw new Error('生产同步地址未固定，或设置页仍允许用户修改服务地址');
 }
-if (!electronMain.includes("ipcMain.handle('sync.fetch'") || !electronMain.includes('safeStorage.encryptString')) {
+if (!electronMain.includes("ipcMain.handle('sync.fetch'") || !electronMain.includes('safeStorage.encryptString')
+    || !electronMain.includes('net.fetch(url.href')) {
     throw new Error('Electron 缺少受限同步请求或系统凭据加密');
 }
 if (!androidSecureStorage.includes('AndroidKeyStore') || !androidSecureStorage.includes('AES/GCM/NoPadding')) {
     throw new Error('Android Token 未使用 Keystore AES-GCM 安全存储');
 }
-if (!workerPassword.includes('PBKDF2') || !workerPassword.includes('210_000')
+if (!workerPassword.includes('PBKDF2') || !workerPassword.includes('100_000')
     || !workerPassword.includes('PASSWORD_MIN_LENGTH = 8') || !workerPassword.includes('PASSWORD_MAX_LENGTH = 128')
     || !workerJwt.includes("iss: ISSUER")) {
     throw new Error('Worker 缺少 PBKDF2 密码保护或完整 JWT 声明');

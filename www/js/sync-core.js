@@ -8,3 +8,7 @@ export function decideSyncAction({ remoteRevision, localRevision, localDirty, lo
     }
     return 'conflict';
 }
+
+export function shouldRenderSyncConflictPanel(phase, hasPanel) {
+    return (phase === 'conflict') !== Boolean(hasPanel);
+}

@@ -1,5 +1,5 @@
 const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
-const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, net, safeStorage, session, shell } = require('electron');
 const http = require('node:http');
 const path = require('node:path');
 
@@ -70,10 +70,13 @@ ipcMain.handle('sync.fetch', async (_event, rawUrl, options = {}) => {
     if (url.protocol !== 'https:' && !localDevelopment) throw new Error('同步服务仅允许 HTTPS');
     if (!url.pathname.startsWith('/api/')) throw new Error('同步服务路径无效');
     const method = ['GET', 'POST', 'PUT'].includes(options.method) ? options.method : 'GET';
-    const response = await fetch(url, {
+    // Electron 的 net.fetch 使用 Chromium 网络栈并遵循系统代理；Node 全局 fetch
+    // 在使用系统代理的网络环境下可能直接报 TypeError: fetch failed。
+    const response = await net.fetch(url.href, {
         method,
         headers: options.headers && typeof options.headers === 'object' ? options.headers : {},
         body: method === 'GET' ? undefined : String(options.body || ''),
+        signal: AbortSignal.timeout(15000),
     });
     const body = await response.text();
     if (body.length > 2 * 1024 * 1024) throw new Error('同步服务响应过大');

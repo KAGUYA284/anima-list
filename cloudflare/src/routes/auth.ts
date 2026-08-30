@@ -41,7 +41,16 @@ auth.post('/register', rateLimit(), async c => {
         return c.json({ success: true, data: { user: { id, email } } }, 201);
     } catch (error) {
         const code = error instanceof Error ? error.message : 'INVALID_REQUEST';
-        return c.json({ success: false, error: { code, message: '注册信息不符合要求' } }, 400);
+        if (['INVALID_CONTENT_TYPE', 'REQUEST_TOO_LARGE', 'INVALID_EMAIL', 'INVALID_PASSWORD', 'INVALID_REQUEST'].includes(code)) {
+            return c.json({ success: false, error: { code, message: '注册信息不符合要求' } }, 400);
+        }
+        // Do not expose D1/WebCrypto internals to clients, but retain the concrete
+        // failure in Worker logs so production registration failures are diagnosable.
+        console.error('[auth.register] internal failure', {
+            name: error instanceof Error ? error.name : 'UnknownError',
+            message: code,
+        });
+        return c.json({ success: false, error: { code: 'REGISTER_FAILED', message: '注册服务暂时不可用' } }, 500);
     }
 });
 
