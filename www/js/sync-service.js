@@ -3,10 +3,10 @@ import { readBackup } from './data.js';
 import { secureTokenStorage } from './secure-storage.js';
 import { replaceAnimeList, state } from './store.js';
 import { syncDataStorage } from './sync-storage.js';
-import { decideSyncAction } from './sync-core.js';
+import { decideSyncAction, hasSyncableAnimeList, hasSyncableSnapshot } from './sync-core.js';
 
 const AUTH_USER_KEY = 'ANIMA_AUTH_USER';
-let syncStatus = { phase: 'idle', message: '尚未同步', lastSyncedAt: 0, conflict: null };
+let syncStatus = { phase: 'idle', message: '尚未同步', lastSyncedAt: 0, conflict: null, protection: null };
 let autoSyncTimer = null;
 
 export class SyncConflictError extends Error {
@@ -82,14 +82,14 @@ export async function login(email, password) {
     const data = await apiRequest('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     if (!(await secureTokenStorage.setToken(data.accessToken))) throw new Error('当前设备安全凭据存储不可用');
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
-    setStatus({ phase: 'idle', message: '已登录，等待同步', conflict: null });
+    setStatus({ phase: 'idle', message: '已登录，等待同步', conflict: null, protection: null });
     return data.user;
 }
 
 export async function logout() {
     await secureTokenStorage.removeToken();
     localStorage.removeItem(AUTH_USER_KEY);
-    setStatus({ phase: 'idle', message: '尚未登录', conflict: null });
+    setStatus({ phase: 'idle', message: '尚未登录', conflict: null, protection: null });
 }
 
 export function createLocalSnapshot() {
@@ -131,10 +131,18 @@ function applyRemote(remote) {
 
 export async function syncNow() {
     if (!getStoredUser() || !(await secureTokenStorage.getToken())) throw new Error('请先登录云同步账号');
+    if (!hasSyncableAnimeList(state.animeList)) {
+        setStatus({ phase: 'protected', message: '本地番剧列表为空，不可同步', conflict: null, protection: 'local' });
+        return { action: 'blocked-empty' };
+    }
     if (!navigator.onLine) { setStatus({ phase: 'offline', message: '当前离线，联网后自动同步' }); return { action: 'offline' }; }
-    setStatus({ phase: 'syncing', message: '正在检查云端数据…', conflict: null });
+    setStatus({ phase: 'syncing', message: '正在检查云端数据…', conflict: null, protection: null });
     try {
         const remote = await apiRequest('/api/sync', { method: 'GET' });
+        if (!hasSyncableSnapshot(remote.snapshot)) {
+            setStatus({ phase: 'protected', message: '云端数据为空，不可同步', conflict: null, protection: 'remote' });
+            return { action: 'blocked-empty-remote', remote };
+        }
         const localSnapshot = createLocalSnapshot();
         const localHash = await hashSnapshot(localSnapshot);
         const action = decideSyncAction({
@@ -152,27 +160,32 @@ export async function syncNow() {
             syncDataStorage.setLastHash(remote.dataHash || localHash);
         } else if (action === 'conflict') throw new SyncConflictError(remote, localSnapshot);
         const now = Date.now();
-        setStatus({ phase: 'success', message: action === 'none' ? '本地与云端已一致' : '同步完成', lastSyncedAt: now, conflict: null });
+        setStatus({ phase: 'success', message: action === 'none' ? '本地与云端已一致' : '同步完成', lastSyncedAt: now, conflict: null, protection: null });
         return { action, remote };
     } catch (error) {
         if (error instanceof SyncConflictError) {
-            setStatus({ phase: 'conflict', message: '检测到多设备修改冲突', conflict: error });
-        } else setStatus({ phase: 'error', message: error.message || '同步失败' });
+            setStatus({ phase: 'conflict', message: '检测到多设备修改冲突', conflict: error, protection: null });
+        } else setStatus({ phase: 'error', message: error.message || '同步失败', protection: null });
         throw error;
     }
 }
 
 export async function resolveConflict(choice, conflict = syncStatus.conflict) {
     if (!(conflict instanceof SyncConflictError)) throw new Error('没有待处理的同步冲突');
+    if (!hasSyncableSnapshot(conflict.remote?.snapshot)) {
+        setStatus({ phase: 'protected', message: '云端数据为空，不可同步', conflict: null, protection: 'remote' });
+        throw new Error('云端数据为空，不可同步');
+    }
     if (choice === 'remote') {
         applyRemote(conflict.remote);
-        setStatus({ phase: 'success', message: '已使用云端数据', lastSyncedAt: Date.now(), conflict: null });
+        setStatus({ phase: 'success', message: '已使用云端数据', lastSyncedAt: Date.now(), conflict: null, protection: null });
         return;
     }
     if (choice === 'local') {
+        if (!hasSyncableAnimeList(state.animeList)) throw new Error('本地番剧列表为空，不能覆盖云端数据');
         const latest = await apiRequest('/api/sync', { method: 'GET' });
         await upload(conflict.localSnapshot, Number(latest.revision) || 0);
-        setStatus({ phase: 'success', message: '已确认使用本地数据覆盖云端', lastSyncedAt: Date.now(), conflict: null });
+        setStatus({ phase: 'success', message: '已确认使用本地数据覆盖云端', lastSyncedAt: Date.now(), conflict: null, protection: null });
         return;
     }
     throw new Error('未知冲突处理方式');

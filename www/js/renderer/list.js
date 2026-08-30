@@ -243,7 +243,7 @@ function renderSwipeRow(anime, cardHtml) {
         <div class="anime-swipe-row" data-swipe-id="${id}">
             <div class="anime-swipe-actions" aria-label="${escHtml(anime.title)}操作">
                 <button class="anime-swipe-action anime-swipe-edit" type="button" data-card-edit="${id}" title="编辑" aria-label="编辑">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5-5l2.1 2.1-2.4 2.4-2.1-2.1a4 4 0 0 0 5 5L4 17v3h3l8.3-8.3a4 4 0 0 0 5-5l-2.1 2.1-2.4-2.4 2.1-2.1a4 4 0 0 0-5 5Z"/></svg>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06-2.83 2.83-.06-.06a1.65 1.65 0 0 0-1.82-.33A1.65 1.65 0 0 0 14 20.83V21h-4v-.17a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06-2.83-2.83.06-.06A1.65 1.65 0 0 0 4.6 15 1.65 1.65 0 0 0 3.09 14H3v-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06L7.04 4.3l.06.06A1.65 1.65 0 0 0 8.92 4 1.65 1.65 0 0 0 10 2.17V2h4v.17A1.65 1.65 0 0 0 15.08 4a1.65 1.65 0 0 0 1.82-.33l.06-.06 2.83 2.83-.06.06A1.65 1.65 0 0 0 19.4 9 1.65 1.65 0 0 0 20.91 10H21v4h-.09A1.65 1.65 0 0 0 19.4 15Z"/></svg>
                 </button>
                 <button class="anime-swipe-action anime-swipe-delete" type="button" data-card-delete="${id}" title="删除" aria-label="删除">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>

@@ -17,7 +17,7 @@ export function attachSettingsEvents() {
     window.__animaSyncSettingsHandler = event => {
         if (state.currentPage !== 'settings') return;
         const phase = event.detail?.phase || 'idle';
-        if (shouldRenderSyncConflictPanel(phase, document.getElementById('syncConflictPanel'))) {
+        if (phase === 'protected' || shouldRenderSyncConflictPanel(phase, document.getElementById('syncConflictPanel'))) {
             setState({});
             return;
         }
@@ -144,9 +144,13 @@ export function attachSettingsEvents() {
         setState({});
     });
     document.getElementById('syncNowBtn')?.addEventListener('click', async event => {
+        if (!state.animeList.length) { showToast('本地番剧列表为空，暂不可同步'); return; }
         const button = event.currentTarget;
         button.disabled = true;
-        try { await syncNow(); showToast('同步完成'); }
+        try {
+            const result = await syncNow();
+            showToast(result?.action === 'blocked-empty-remote' ? '云端数据为空，不可同步' : '同步完成');
+        }
         catch (error) { if (error.name !== 'SyncConflictError') showToast(error.message); }
         finally { if (document.contains(button)) button.disabled = false; }
     });
@@ -156,6 +160,7 @@ export function attachSettingsEvents() {
         catch (error) { showToast(error.message); }
     });
     document.getElementById('syncUseLocalBtn')?.addEventListener('click', async () => {
+        if (!state.animeList.length) { showToast('本地番剧列表为空，不能覆盖云端数据'); return; }
         if (!confirm('确定使用当前设备的数据覆盖最新云端快照吗？')) return;
         try { await resolveConflict('local'); showToast('已使用本地数据覆盖云端'); }
         catch (error) { showToast(error.message); }

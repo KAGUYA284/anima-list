@@ -1676,6 +1676,8 @@ input[type="date"] {
 .sync-status-success { color: #047857; background: #ecfdf5; }
 .sync-status-error, .sync-status-conflict { color: #b91c1c; background: #fef2f2; }
 .sync-status-offline { color: #92400e; background: #fffbeb; }
+.sync-status-protected { color: #92400e; background: #fffbeb; }
+.sync-conflict-time { margin-top: 0.35rem; font-size: 0.8125rem; color: #7f1d1d; }
 .sync-account-email {
     color: #475569;
     font-size: 0.875rem;
@@ -1976,6 +1978,7 @@ body.dark-mode {
 .dark-mode .sync-status-success { background: #12352d; color: #6ee7b7; }
 .dark-mode .sync-status-error,
 .dark-mode .sync-status-conflict { background: #3f1d2b; color: #fca5a5; }
+.dark-mode .sync-status-protected { background: #422006; color: #fcd34d; }
 .dark-mode .sync-conflict-panel { background: #3f1d2b; border-color: #7f1d1d; color: #fecaca; }
 .dark-mode .sync-account-email { color: #cbd5e1; }
 .dark-mode .settings-section-title {

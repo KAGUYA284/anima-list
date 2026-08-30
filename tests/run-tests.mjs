@@ -9,3 +9,4 @@ import './grouping.test.mjs';
 import './list-order.test.mjs';
 import './seasonal-import.test.mjs';
 import './sync.test.mjs';
+import './card-interaction.test.mjs';

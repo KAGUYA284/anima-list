@@ -7,6 +7,13 @@ import { state } from '../store.js';
 import { getStoredUser, getSyncStatus } from '../sync-service.js';
 import { escHtml } from '../utils.js';
 
+function formatSyncTime(value) {
+    const timestamp = Number(value);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return '暂无记录';
+    const date = new Date(timestamp);
+    return Number.isNaN(date.getTime()) ? '暂无记录' : date.toLocaleString('zh-CN', { hour12: false });
+}
+
 /** 渲染设置页 */
 export function renderSettingsPage() {
     const currentStyle = state.settings.listStyle;
@@ -16,6 +23,11 @@ export function renderSettingsPage() {
     const listOrder = state.settings.listOrder;
     const syncUser = getStoredUser();
     const syncStatus = getSyncStatus();
+    const localSyncUnavailable = state.animeList.length === 0;
+    const remoteSyncUnavailable = syncStatus.protection === 'remote';
+    const syncUnavailable = localSyncUnavailable || remoteSyncUnavailable;
+    const syncUnavailableMessage = remoteSyncUnavailable ? '云端数据为空，不可同步' : '本地番剧列表为空，暂不可同步';
+    const remoteSyncTime = formatSyncTime(syncStatus.conflict?.remote?.serverUpdatedAt);
     return `
         <header class="header">
             <div class="header-content">
@@ -112,9 +124,10 @@ export function renderSettingsPage() {
                         </div>
                         <div class="sync-status sync-status-${escHtml(syncStatus.phase)}" id="syncStatusText">${escHtml(syncStatus.message)}</div>
                         <div class="sync-actions">
-                            <button class="btn btn-primary" id="syncNowBtn">立即同步</button>
+                            <button class="btn btn-primary" id="syncNowBtn" ${syncUnavailable ? `disabled title="${syncUnavailableMessage}"` : ''}>立即同步</button>
                             <button class="btn btn-secondary" id="syncLogoutBtn">退出登录</button>
                         </div>
+                        ${syncUnavailable ? `<div class="sync-status sync-status-protected">${syncUnavailableMessage}</div>` : ''}
                     ` : `
                         <label class="sync-field"><span class="settings-label">邮箱</span><input class="form-input" id="syncEmail" type="email" autocomplete="username" maxlength="254"></label>
                         <label class="sync-field"><span class="settings-label">密码</span><input class="form-input" id="syncPassword" type="password" autocomplete="current-password" minlength="${SYNC_PASSWORD_MIN_LENGTH}" maxlength="${SYNC_PASSWORD_MAX_LENGTH}" placeholder="${SYNC_PASSWORD_MIN_LENGTH}–${SYNC_PASSWORD_MAX_LENGTH} 个字符"></label>
@@ -128,9 +141,10 @@ export function renderSettingsPage() {
                         <div class="sync-conflict-panel" id="syncConflictPanel">
                             <strong>检测到多设备修改冲突</strong>
                             <p>系统不会静默覆盖。请选择保留云端、本地覆盖云端，或先导出双方 JSON。</p>
+                            <p class="sync-conflict-time">云端上次同步时间：${escHtml(remoteSyncTime)}</p>
                             <div class="sync-actions">
                                 <button class="btn btn-secondary" id="syncUseRemoteBtn">使用云端</button>
-                                <button class="btn btn-secondary" id="syncUseLocalBtn">使用本地</button>
+                                <button class="btn btn-secondary" id="syncUseLocalBtn" ${syncUnavailable ? `disabled title="${syncUnavailableMessage}"` : ''}>使用本地</button>
                                 <button class="btn btn-secondary" id="syncExportConflictBtn">导出双方 JSON</button>
                             </div>
                         </div>

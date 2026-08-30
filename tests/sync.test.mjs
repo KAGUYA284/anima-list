@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decideSyncAction, shouldRenderSyncConflictPanel } from '../www/js/sync-core.js';
+import {
+    decideSyncAction, hasSyncableAnimeList, hasSyncableSnapshot, shouldRenderSyncConflictPanel,
+} from '../www/js/sync-core.js';
 import { SYNC_API_URL, SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from '../www/js/constants.js';
 
 test('production sync configuration is fixed and uses the shared password range', () => {
@@ -29,4 +31,16 @@ test('sync conflict panel rerenders when entering or leaving conflict state', ()
     assert.equal(shouldRenderSyncConflictPanel('conflict', true), false);
     assert.equal(shouldRenderSyncConflictPanel('success', true), true);
     assert.equal(shouldRenderSyncConflictPanel('success', false), false);
+});
+
+test('an empty local anime list cannot be uploaded to cloud sync', () => {
+    assert.equal(hasSyncableAnimeList([]), false);
+    assert.equal(hasSyncableAnimeList(null), false);
+    assert.equal(hasSyncableAnimeList([{ id: 'anime-1' }]), true);
+});
+
+test('an empty cloud snapshot cannot participate in sync', () => {
+    assert.equal(hasSyncableSnapshot(null), false);
+    assert.equal(hasSyncableSnapshot({ records: [] }), false);
+    assert.equal(hasSyncableSnapshot({ records: [{ id: 'anime-1' }] }), true);
 });

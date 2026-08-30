@@ -3,6 +3,7 @@
 // ============================================================
 
 import { changeProgress } from '../core.js';
+import { isCardInteractiveTarget } from '../card-interaction.js';
 import { getYucAnime } from '../api.js';
 import { deleteAnime, getAnimeById, setState, state, updateAnime } from '../store.js';
 import { loadCollapsed, saveCollapsed } from '../storage.js';
@@ -159,7 +160,7 @@ export function attachListEvents() {
     // 番剧卡片点击 → 详情页
     document.querySelectorAll('.anime-card').forEach(card => {
         card.addEventListener('click', event => {
-            if (card.dataset.swipeMoved === 'true' || event.target.closest('button')) return;
+            if (card.dataset.swipeMoved === 'true' || isCardInteractiveTarget(event.target)) return;
             const id = card.dataset.id;
             setState({ currentPage: 'detail', currentAnimeId: id });
         });
@@ -201,6 +202,7 @@ function attachSwipeActions() {
         };
         card.addEventListener('pointerdown', event => {
             if (event.button !== undefined && event.button !== 0) return;
+            if (isCardInteractiveTarget(event.target)) return;
             if (openRow && openRow !== row) openRow.classList.remove('swipe-open');
             startX = event.clientX;
             startY = event.clientY;
