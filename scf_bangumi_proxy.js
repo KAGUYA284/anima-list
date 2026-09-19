@@ -50,7 +50,9 @@ function binaryResponse(statusCode, body, contentType, origin = '') {
 }
 
 function getAllowedImageUrl(event) {
-    const value = event.queryString?.url ?? event.queryStringParameters?.url;
+    const queryString = event.queryString || {};
+    const queryStringParameters = event.queryStringParameters || {};
+    const value = queryString.url !== undefined ? queryString.url : queryStringParameters.url;
     if (typeof value !== 'string' || value.length > 2000) return null;
     try {
         const url = new URL(value);
@@ -138,7 +140,8 @@ function htmlText(value) {
 
 function classContent(html, classPrefix) {
     const pattern = new RegExp(`<([a-z][a-z0-9]*)[^>]*class=["'][^"']*${classPrefix}[^"']*["'][^>]*>([\\s\\S]*?)<\\/\\1>`, 'i');
-    return pattern.exec(html)?.[2] || '';
+    const match = pattern.exec(html);
+    return match ? match[2] : '';
 }
 
 function normalizeYucTitle(value) {
@@ -218,12 +221,12 @@ function scheduleFromBroadcast(value, season) {
     const weekDayNames = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 };
     const weekDayMatch = /周([一二三四五六日天])/.exec(broadcast);
     const timeMatch = /(?:^|\s)((?:[01]?\d|2\d):[0-5]\d)/.exec(broadcast);
-    const updateTime = timeMatch?.[1]?.padStart(5, '0') || '';
+    const updateTime = timeMatch && timeMatch[1] ? timeMatch[1].padStart(5, '0') : '';
     const airDate = fullYucDate(broadcast, season);
     return {
         dateText: broadcast,
         airDate,
-        updateWeekDay: weekDayNames[weekDayMatch?.[1]] || weekDayFromDate(airDate),
+        updateWeekDay: weekDayMatch ? weekDayNames[weekDayMatch[1]] : weekDayFromDate(airDate),
         updateTime,
         updatePeriod: updatePeriodFromBroadcast(broadcast) || updatePeriodFromTime(updateTime),
         broadcast,
@@ -269,7 +272,8 @@ function parseYucPage(html, season) {
     let weekDayMatch;
     while ((weekDayMatch = weekDayPattern.exec(html))) {
         const label = htmlText(weekDayMatch[1]);
-        const weekDay = [...weekDayMap].find(([name]) => label.includes(name))?.[1] || 0;
+        const weekDayEntry = [...weekDayMap].find(([name]) => label.includes(name));
+        const weekDay = weekDayEntry ? weekDayEntry[1] : 0;
         if (weekDay) weekDayMarkers.push({ index: weekDayMatch.index, weekDay });
     }
     const schedulePattern = /<div\s+style=["'][^"']*float\s*:\s*left[^"']*["'][^>]*>\s*<div[^>]*class=["'][^"']*div_date[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div>[\s\S]*?<td[^>]*class=["'][^"']*date_title[^"']*["'][^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/table>/gi;
@@ -284,9 +288,9 @@ function parseYucPage(html, season) {
         const dateBlock = match[1];
         const updateTime = htmlText(classContent(dateBlock, 'imgtext4') || classContent(dateBlock, 'imgtext5')).replace(/~.*$/, '').trim();
         const dateText = htmlText(classContent(dateBlock, 'imgep'));
-        const rawImageUrl = /<img[^>]+data-src=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
-            || /<a[^>]+href=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock)?.[1]
-            || '';
+        const dataImageMatch = /<img[^>]+data-src=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock);
+        const linkedImageMatch = /<a[^>]+href=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/i.exec(dateBlock);
+        const rawImageUrl = dataImageMatch ? dataImageMatch[1] : (linkedImageMatch ? linkedImageMatch[1] : '');
         const imageUrl = rawImageUrl.replace(/^http:/i, 'https:');
         const airDate = fullYucDate(dateText, season);
         schedules.push({
@@ -308,11 +312,15 @@ function parseYucPage(html, season) {
         const titleJp = htmlText(classContent(table, 'title_jp_'));
         if (!titleCn && !titleJp) continue;
         const prefix = html.slice(Math.max(0, match.index - 1000), match.index);
-        const images = [...prefix.matchAll(/<img[^>]+(?:data-src|src)=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)];
+        const imagePattern = /<img[^>]+(?:data-src|src)=["'](https?:\/\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi;
+        const images = [];
+        let imageMatch;
+        while ((imageMatch = imagePattern.exec(prefix))) images.push(imageMatch);
+        const lastImage = images.length ? images[images.length - 1] : null;
         details.push({
             titleCn,
             titleJp,
-            imageUrl: (images.at(-1)?.[1] || '').replace(/^http:/i, 'https:'),
+            imageUrl: (lastImage ? lastImage[1] : '').replace(/^http:/i, 'https:'),
             broadcast: htmlText(classContent(table, 'broadcast_')),
             staff: parseStaff(classContent(table, 'staff_')),
         });
@@ -329,17 +337,17 @@ function parseYucPage(html, season) {
                 titleScore(schedule.title, detail.titleJp),
             ),
         })).sort((left, right) => right.score - left.score)[0];
-        const detail = match?.score >= 55 ? match.detail : null;
+        const detail = match && match.score >= 55 ? match.detail : null;
         if (detail) matchedDetails.add(match.index);
-        const updatePeriod = updatePeriodFromBroadcast(detail?.broadcast) || schedule.updatePeriod;
+        const updatePeriod = updatePeriodFromBroadcast(detail ? detail.broadcast : '') || schedule.updatePeriod;
         return {
-            title: detail?.titleCn || schedule.title,
-            titleCn: detail?.titleCn || schedule.title,
-            titleJp: detail?.titleJp || '',
+            title: (detail && detail.titleCn) || schedule.title,
+            titleCn: (detail && detail.titleCn) || schedule.title,
+            titleJp: (detail && detail.titleJp) || '',
             imageUrl: schedule.imageUrl,
-            broadcast: detail?.broadcast || '',
-            staff: detail?.staff || {},
-            schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '', isPreview: false },
+            broadcast: (detail && detail.broadcast) || '',
+            staff: (detail && detail.staff) || {},
+            schedule: { ...schedule, updatePeriod, broadcast: (detail && detail.broadcast) || '', isPreview: false },
         };
     });
     details.forEach((detail, index) => {
@@ -365,11 +373,11 @@ function matchYucAnime(records, titles) {
         const score = Math.max(0, ...requested.flatMap(title => [
             titleScore(title, record.titleCn),
             titleScore(title, record.titleJp),
-            titleScore(title, record.schedule?.title),
+            titleScore(title, record.schedule ? record.schedule.title : ''),
         ]));
         if (!best || score > best.score) best = { score, record };
     }
-    return best?.score >= 55 ? best.record : null;
+    return best && best.score >= 55 ? best.record : null;
 }
 
 function yucSeasonFromDate(value, now = new Date()) {
@@ -436,7 +444,7 @@ async function fetchYucAnime(event, origin) {
         } : null, { 'Cache-Control': 'public, max-age=21600' }, origin);
     };
     const cached = yucPageCache.get(season);
-    if (!forceRefresh && cached?.expiresAt > Date.now()) return respondFromRecords(cached.records);
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) return respondFromRecords(cached.records);
 
     try {
         // yuc.wiki 当前 HTTPS 证书已过期，但同一固定主机公开提供 HTTP 200 页面。
@@ -465,7 +473,7 @@ async function fetchYucSeason(event, origin) {
         }, { 'Cache-Control': 'public, max-age=21600' }, origin);
     }
     const cached = yucPageCache.get(season);
-    if (!forceRefresh && cached?.expiresAt > Date.now()) {
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
         return response(200, {
             source: 'yuc.wiki',
             season,
@@ -489,6 +497,112 @@ async function fetchYucSeason(event, origin) {
     }
 }
 
+function requestBangumi({ path, method = 'GET', body = '' }) {
+    return new Promise((resolve, reject) => {
+        const request = https.request({
+            hostname: 'api.bgm.tv',
+            port: 443,
+            path,
+            method,
+            headers: {
+                'User-Agent': 'AnimaList/1.3.0',
+                Accept: 'application/json',
+                ...(method === 'POST' ? {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(body),
+                } : {}),
+            },
+        }, upstream => {
+            const chunks = [];
+            let size = 0;
+            upstream.on('data', chunk => {
+                size += chunk.length;
+                if (size > MAX_RESPONSE_BYTES) request.destroy(new Error('Upstream response too large'));
+                else chunks.push(chunk);
+            });
+            upstream.on('end', () => resolve({
+                statusCode: upstream.statusCode || 502,
+                body: Buffer.concat(chunks).toString('utf8'),
+            }));
+        });
+        request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error('Upstream timeout')));
+        request.on('error', reject);
+        if (method === 'POST') request.write(body);
+        request.end();
+    });
+}
+
+function httpsImageUrl(value) {
+    return typeof value === 'string' ? value.replace(/^http:/i, 'https:') : '';
+}
+
+function normalizeLegacySearch(payload, limit = 8) {
+    const records = Array.isArray(payload && payload.list) ? payload.list : [];
+    return records
+        .filter(item => item && typeof item === 'object' && Number(item.type) === 2)
+        .slice(0, Math.max(1, Math.min(20, Number(limit) || 8)))
+        .map(item => {
+            const images = item.images && typeof item.images === 'object' ? item.images : {};
+            return {
+                id: item.id,
+                type: 2,
+                name: String(item.name || ''),
+                name_cn: String(item.name_cn || ''),
+                summary: String(item.summary || ''),
+                date: String(item.air_date || ''),
+                images: {
+                    large: httpsImageUrl(images.large),
+                    common: httpsImageUrl(images.common),
+                    medium: httpsImageUrl(images.medium),
+                    small: httpsImageUrl(images.small),
+                    grid: httpsImageUrl(images.grid),
+                },
+            };
+        });
+}
+
+async function proxyBangumiSearch(body, origin, requester = requestBangumi) {
+    let input;
+    try {
+        input = JSON.parse(body || '{}');
+    } catch {
+        return response(400, { error: 'Invalid JSON body' }, {}, origin);
+    }
+    const keyword = typeof input.keyword === 'string' ? input.keyword.trim().slice(0, 300) : '';
+    if (!keyword) return response(400, { error: 'Missing keyword' }, {}, origin);
+
+    let primary;
+    try {
+        primary = await requester({ path: '/v0/search/subjects', method: 'POST', body });
+    } catch {
+        primary = null;
+    }
+    const fallbackStatuses = new Set([429, 502, 503, 504]);
+    if (primary && !fallbackStatuses.has(primary.statusCode)) {
+        return response(primary.statusCode, primary.body, {}, origin);
+    }
+
+    try {
+        const legacyPath = `/search/subject/${encodeURIComponent(keyword)}?type=2&responseGroup=small`;
+        const legacy = await requester({ path: legacyPath, method: 'GET', body: '' });
+        if (legacy.statusCode !== 200) {
+            return response(primary ? primary.statusCode : legacy.statusCode, primary ? primary.body : legacy.body, {}, origin);
+        }
+        const mapped = normalizeLegacySearch(JSON.parse(legacy.body), input.limit);
+        return response(200, { total: mapped.length, data: mapped, fallback: 'legacy-search' }, {}, origin);
+    } catch (error) {
+        return response(502, { error: error.message || 'Bangumi search failed' }, {}, origin);
+    }
+}
+
+function eventBody(event) {
+    if (!event.body) return '';
+    if (event.isBase64Encoded && typeof event.body === 'string') {
+        return Buffer.from(event.body, 'base64').toString('utf8');
+    }
+    return typeof event.body === 'string' ? event.body : JSON.stringify(event.body);
+}
+
 exports._test = {
     getAllowedImageUrl,
     isAllowedRequest,
@@ -499,12 +613,17 @@ exports._test = {
     yucSeasonFromDate,
     updatePeriodFromTime,
     updatePeriodFromBroadcast,
+    normalizeLegacySearch,
+    proxyBangumiSearch,
 };
 
 exports.main_handler = async event => {
-    const path = event.path || '';
-    const method = (event.httpMethod || 'GET').toUpperCase();
-    const requestOrigin = event.headers?.origin || event.headers?.Origin || '';
+    const requestContext = event.requestContext || {};
+    const requestHttp = requestContext.http || {};
+    const path = event.path || event.rawPath || requestHttp.path || '';
+    const method = (event.httpMethod || requestHttp.method || 'GET').toUpperCase();
+    const eventHeaders = event.headers || {};
+    const requestOrigin = eventHeaders.origin || eventHeaders.Origin || '';
     const corsOrigin = allowedOrigins.has(requestOrigin) ? requestOrigin : '';
     const send = (statusCode, body = '', headers = {}) => response(statusCode, body, headers, corsOrigin);
 
@@ -526,54 +645,24 @@ exports.main_handler = async event => {
     }
     if (!isAllowedRequest(method, path)) return send(404, { error: 'Not found' });
 
-    const body = event.body
-        ? (typeof event.body === 'string' ? event.body : JSON.stringify(event.body))
-        : '';
+    const body = eventBody(event);
     if (Buffer.byteLength(body) > MAX_BODY_BYTES) return send(413, { error: 'Request body too large' });
+
+    if (method === 'POST' && path === '/v0/search/subjects') {
+        return proxyBangumiSearch(body, corsOrigin);
+    }
 
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(event.queryString || {})) {
         if (typeof value === 'string' && value.length <= 500) query.set(key, value);
     }
-    const targetPath = `${path}${query.size ? `?${query}` : ''}`;
+    const queryText = query.toString();
+    const targetPath = `${path}${queryText ? `?${queryText}` : ''}`;
 
-    return new Promise(resolve => {
-        let settled = false;
-        const finish = value => {
-            if (!settled) {
-                settled = true;
-                resolve(value);
-            }
-        };
-        const request = https.request({
-            hostname: 'api.bgm.tv',
-            port: 443,
-            path: targetPath,
-            method,
-            headers: {
-                'User-Agent': 'AnimaList/1.3.0',
-                ...(method === 'POST' ? {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(body),
-                } : {}),
-            },
-        }, upstream => {
-            const chunks = [];
-            let size = 0;
-            upstream.on('data', chunk => {
-                size += chunk.length;
-                if (size > MAX_RESPONSE_BYTES) {
-                    request.destroy(new Error('Upstream response too large'));
-                    return;
-                }
-                chunks.push(chunk);
-            });
-            upstream.on('end', () => finish(send(upstream.statusCode || 502, Buffer.concat(chunks).toString('utf8'))));
-        });
-
-        request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error('Upstream timeout')));
-        request.on('error', error => finish(send(502, { error: error.message })));
-        if (method === 'POST') request.write(body);
-        request.end();
-    });
+    try {
+        const upstream = await requestBangumi({ path: targetPath, method, body });
+        return send(upstream.statusCode, upstream.body);
+    } catch (error) {
+        return send(502, { error: error.message || 'Bangumi upstream failed' });
+    }
 };

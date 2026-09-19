@@ -8,8 +8,8 @@ globalThis.localStorage = {
 };
 
 const {
-    apiFetch, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl,
-    searchBangumiForYuc, selectBangumiMatch,
+    apiFetch, getBangumiEndpointOrder, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl,
+    searchBangumi, searchBangumiForYuc, selectBangumiMatch,
 } = await import('../www/js/api.js');
 const { fillMissingAnimeFields } = await import('../www/js/import-enrichment.js');
 
@@ -22,6 +22,53 @@ test('Bangumi images use the image proxy only in proxy mode', () => {
     );
     assert.equal(getBangumiImageUrl('https://example.test/image.jpg', 'proxy1'), 'https://example.test/image.jpg');
     assert.equal(getBangumiImageUrl('javascript:alert(1)', 'proxy1'), '');
+});
+
+test('Bangumi endpoint order follows the selected connection mode', () => {
+    assert.deepEqual(getBangumiEndpointOrder('direct'), [
+        'https://api.bgm.tv',
+        'https://1449216768-89tlli7yzj.ap-hongkong.tencentscf.com',
+    ]);
+    assert.deepEqual(getBangumiEndpointOrder('proxy1'), [
+        'https://1449216768-89tlli7yzj.ap-hongkong.tencentscf.com',
+        'https://api.bgm.tv',
+    ]);
+});
+
+test('direct Bangumi search automatically falls back to the proxy', async () => {
+    const urls = [];
+    globalThis.fetch = async url => {
+        urls.push(String(url));
+        if (String(url).startsWith('https://api.bgm.tv')) {
+            return new Response('{}', { status: 502 });
+        }
+        return new Response(JSON.stringify({
+            data: [{ id: 42, type: 2, name: 'Fallback', name_cn: '代理降级成功' }],
+        }), { status: 200 });
+    };
+    const records = await searchBangumi('代理降级测试');
+    assert.equal(records[0].id, 42);
+    assert.ok(urls[0].startsWith('https://api.bgm.tv'));
+    assert.ok(urls.at(-1).startsWith('https://1449216768-89tlli7yzj.ap-hongkong.tencentscf.com'));
+});
+
+test('proxy-first Yuc search automatically falls back to direct Bangumi', async () => {
+    const urls = [];
+    globalThis.fetch = async url => {
+        urls.push(String(url));
+        if (String(url).startsWith('https://1449216768-89tlli7yzj.ap-hongkong.tencentscf.com')) {
+            return new Response('{}', { status: 503 });
+        }
+        return new Response(JSON.stringify({
+            data: [{ id: 84, type: 2, name: '対象作品', name_cn: '目标作品', date: '2026-10-03' }],
+        }), { status: 200 });
+    };
+    const match = await searchBangumiForYuc({
+        title: '目标作品', titleCn: '目标作品', titleJp: '対象作品', schedule: { airDate: '2026-10-03' },
+    });
+    assert.equal(match.id, 84);
+    assert.ok(urls[0].startsWith('https://1449216768-89tlli7yzj.ap-hongkong.tencentscf.com'));
+    assert.ok(urls.at(-1).startsWith('https://api.bgm.tv'));
 });
 
 test('SCF Base64 image responses are decoded into Blob URLs', async () => {

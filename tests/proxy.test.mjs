@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -18,6 +19,46 @@ test('image proxy only accepts HTTPS Bangumi picture paths', () => {
 test('proxy permits the subject persons endpoint used for animation studios', () => {
     assert.equal(_test.isAllowedRequest('GET', '/v0/subjects/501963/persons'), true);
     assert.equal(_test.isAllowedRequest('GET', '/v0/subjects/501963/private'), false);
+});
+
+test('SCF source remains parseable by the configured legacy-compatible runtime', () => {
+    const source = readFileSync(new URL('../scf_bangumi_proxy.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /\?\.(?!\.)|\?\?|\.at\(|\.matchAll\(/);
+});
+
+test('SCF maps the legacy Bangumi search response to the v0 shape', async () => {
+    const requests = [];
+    const requester = async request => {
+        requests.push(request);
+        if (requests.length === 1) return { statusCode: 502, body: 'Bad Gateway' };
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                list: [{
+                    id: 42, type: 2, name: '対象作品', name_cn: '目标作品', air_date: '2026-10-03',
+                    images: { large: 'http://lain.bgm.tv/pic/cover/l/example.jpg' },
+                }],
+            }),
+        };
+    };
+    const response = await _test.proxyBangumiSearch(JSON.stringify({ keyword: '対象作品', limit: 8 }), '', requester);
+    const payload = JSON.parse(response.body);
+    assert.equal(response.statusCode, 200);
+    assert.equal(requests[0].path, '/v0/search/subjects');
+    assert.equal(requests[1].path, '/search/subject/%E5%AF%BE%E8%B1%A1%E4%BD%9C%E5%93%81?type=2&responseGroup=small');
+    assert.equal(payload.fallback, 'legacy-search');
+    assert.deepEqual(payload.data[0], {
+        id: 42,
+        type: 2,
+        name: '対象作品',
+        name_cn: '目标作品',
+        summary: '',
+        date: '2026-10-03',
+        images: {
+            large: 'https://lain.bgm.tv/pic/cover/l/example.jpg',
+            common: '', medium: '', small: '', grid: '',
+        },
+    });
 });
 
 test('binaryResponse 以 base64 承载并显式声明 X-Encoding 头', () => {

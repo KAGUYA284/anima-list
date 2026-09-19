@@ -136,6 +136,11 @@ Local Storage 和 IndexedDB 固定保存在同目录的 `test-user-data/` 中；
 4. **过门禁**：`npm run check` 全绿（lint + test + build + dist 校验）。
 5. **代理**：如改动 `scf_bangumi_proxy.js`，重新部署腾讯云 SCF，并确认
    `/yuc/anime`、Bangumi API 和图片代理均在线生效。
+   - 推荐运行时：Node.js 16.13 或 Node.js 18。
+   - 源文件名为 `scf_bangumi_proxy.js` 时，函数入口使用
+     `scf_bangumi_proxy.main_handler`；若部署为 `index.js`，入口使用
+     `index.main_handler`。
+   - 只上传原始 JavaScript 文件，不要把 Markdown 代码围栏或说明文字粘贴到函数源码。
 6. **出多端产物**：执行 `npm run release:all`。Android 签名需要
    `android/keystore.properties`，格式见 `keystore.properties.example`。
 7. **冒烟测试**：安装 APK / 运行便携版，验证列表、详情、导入导出、图片代理正常。

@@ -201,18 +201,31 @@ export async function apiFetch(url, options = {}, { retries = 2, timeoutMs = DEF
     throw lastError || new Error('Bangumi API 请求失败');
 }
 
-async function apiFetchWithEncodingFallback(path, options = {}) {
-    const primaryBase = getApiBaseUrl();
-    const primary = await apiFetch(`${primaryBase}${path}`, options);
-    if (primaryBase === API_PROXIES.direct || !hasBrokenEncoding(primary)) return primary;
+export function getBangumiEndpointOrder(endpoint = state.settings.apiEndpoint) {
+    return endpoint === 'proxy1'
+        ? [API_PROXIES.proxy1, API_PROXIES.direct]
+        : [API_PROXIES.direct, API_PROXIES.proxy1];
+}
 
-    try {
-        const directOptions = { ...options };
-        delete directOptions.signal;
-        return await apiFetch(`${API_PROXIES.direct}${path}`, directOptions, { retries: 0 });
-    } catch {
-        throw new Error('代理返回了损坏的 UTF-8 文本，请更新代理后重试');
+async function apiFetchWithEndpointFallback(path, options = {}, { endpoint } = {}) {
+    const bases = getBangumiEndpointOrder(endpoint);
+    let lastError;
+    for (const [index, base] of bases.entries()) {
+        try {
+            // 两个独立入口本身就是冗余：单个入口失败后立即切换，避免每个入口
+            // 各自重试并等待多轮超时，造成搜索界面长时间无响应。
+            const data = await apiFetch(`${base}${path}`, options, { retries: 0 });
+            if (base !== API_PROXIES.direct && hasBrokenEncoding(data) && index + 1 < bases.length) {
+                lastError = new Error('代理返回了损坏的 UTF-8 文本');
+                continue;
+            }
+            return data;
+        } catch (error) {
+            if (error.name === 'AbortError') throw error;
+            lastError = error;
+        }
     }
+    throw lastError || new Error('Bangumi 直连与代理均不可用');
 }
 
 async function cachedRequest(key, loader, ttlMs, { forceRefresh = false } = {}) {
@@ -253,18 +266,7 @@ async function searchBangumiAt(keyword, { signal, endpoint } = {}) {
         body: JSON.stringify({ keyword: normalized, filter: { type: [2] }, limit: 8 }),
         signal,
     };
-    const explicitBase = API_PROXIES[endpoint];
-    let data;
-    if (explicitBase) {
-        data = await apiFetch(`${explicitBase}/v0/search/subjects`, requestOptions);
-        if (explicitBase !== API_PROXIES.direct && hasBrokenEncoding(data)) {
-            const directOptions = { ...requestOptions };
-            delete directOptions.signal;
-            data = await apiFetch(`${API_PROXIES.direct}/v0/search/subjects`, directOptions, { retries: 0 });
-        }
-    } else {
-        data = await apiFetchWithEncodingFallback('/v0/search/subjects', requestOptions);
-    }
+    const data = await apiFetchWithEndpointFallback('/v0/search/subjects', requestOptions, { endpoint });
     return (Array.isArray(data?.data) ? data.data : [])
         .filter(item => item && typeof item === 'object' && item.type === 2);
 }
@@ -320,7 +322,7 @@ export async function searchBangumiForYuc(record, { signal } = {}) {
 export function getBangumiSubject(id, { forceRefresh = false } = {}) {
     const key = `${getApiBaseUrl()}:subject:${id}`;
     return cachedRequest(key, async () => {
-        const data = await apiFetchWithEncodingFallback(`/v0/subjects/${encodeURIComponent(id)}`);
+        const data = await apiFetchWithEndpointFallback(`/v0/subjects/${encodeURIComponent(id)}`);
         return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
     }, 6 * 60 * 60 * 1000, { forceRefresh });
 }
@@ -328,7 +330,7 @@ export function getBangumiSubject(id, { forceRefresh = false } = {}) {
 export function getBangumiCharacters(id) {
     const key = `${getApiBaseUrl()}:characters:${id}`;
     return cachedRequest(key, async () => {
-        const data = await apiFetchWithEncodingFallback(`/v0/subjects/${encodeURIComponent(id)}/characters`);
+        const data = await apiFetchWithEndpointFallback(`/v0/subjects/${encodeURIComponent(id)}/characters`);
         return Array.isArray(data) ? data.filter(item => item && typeof item === 'object') : [];
     }, 6 * 60 * 60 * 1000);
 }
@@ -336,7 +338,7 @@ export function getBangumiCharacters(id) {
 export function getBangumiPersons(id) {
     const key = `${getApiBaseUrl()}:persons:${id}`;
     return cachedRequest(key, async () => {
-        const data = await apiFetchWithEncodingFallback(`/v0/subjects/${encodeURIComponent(id)}/persons`);
+        const data = await apiFetchWithEndpointFallback(`/v0/subjects/${encodeURIComponent(id)}/persons`);
         return Array.isArray(data) ? data.filter(item => item && typeof item === 'object') : [];
     }, 6 * 60 * 60 * 1000);
 }

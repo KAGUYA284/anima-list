@@ -76,6 +76,15 @@ if (!proxySource.includes("path === '/yuc/anime'") || !proxySource.includes("hos
 if (!proxySource.includes("path === '/yuc/season'") || !proxySource.includes('updatePeriodFromBroadcast')) {
     throw new Error('SCF 代理缺少季度新番表路由或播出时段映射');
 }
+if (/\?\.(?!\.)|\?\?|\.at\(|\.matchAll\(/.test(proxySource)) {
+    throw new Error('SCF 代理包含旧版腾讯 Node 运行时无法解析或执行的语法');
+}
+if (!proxySource.includes('proxyBangumiSearch') || !proxySource.includes('legacy-search')) {
+    throw new Error('SCF 代理缺少 Bangumi 搜索 5xx 降级路径');
+}
+if (!webSource.includes('getBangumiEndpointOrder') || !webSource.includes('[API_PROXIES.direct, API_PROXIES.proxy1]')) {
+    throw new Error('Bangumi 数据请求缺少直连/代理双向自动降级');
+}
 if (!webSource.includes("listStyle: 'cover'") || !webSource.includes('showAnimeDetails: true')) {
     throw new Error('设置缺少默认封面模式或番剧具体信息开关');
 }
