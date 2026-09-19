@@ -39,7 +39,8 @@ export function attachYucEvents() {
             list.innerHTML = '<p class="yuc-season-empty">无数据</p>';
             return;
         }
-        status.textContent = `${yucSeasonLabel(season)}共 ${records.length} 部番剧`;
+        const previewCount = records.filter(record => record.schedule?.isPreview).length;
+        status.textContent = `${yucSeasonLabel(season)}共 ${records.length} 部番剧${previewCount ? `，其中 ${previewCount} 部具体更新时间待 yuc.wiki 更新` : ''}`;
         list.innerHTML = renderYucRecords(records, existingTitleSet());
         list.querySelectorAll('[data-yuc-add]').forEach(button => {
             button.addEventListener('click', async () => {

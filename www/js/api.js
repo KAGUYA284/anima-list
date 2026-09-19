@@ -215,9 +215,9 @@ async function apiFetchWithEncodingFallback(path, options = {}) {
     }
 }
 
-async function cachedRequest(key, loader, ttlMs) {
+async function cachedRequest(key, loader, ttlMs, { forceRefresh = false } = {}) {
     const cached = getCacheEntry(key);
-    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) return cached.value;
     if (inFlight.has(key)) return inFlight.get(key);
 
     const promise = loader()
@@ -317,12 +317,12 @@ export async function searchBangumiForYuc(record, { signal } = {}) {
     return null;
 }
 
-export function getBangumiSubject(id) {
+export function getBangumiSubject(id, { forceRefresh = false } = {}) {
     const key = `${getApiBaseUrl()}:subject:${id}`;
     return cachedRequest(key, async () => {
         const data = await apiFetchWithEncodingFallback(`/v0/subjects/${encodeURIComponent(id)}`);
         return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
-    }, 6 * 60 * 60 * 1000);
+    }, 6 * 60 * 60 * 1000, { forceRefresh });
 }
 
 export function getBangumiCharacters(id) {
@@ -346,17 +346,18 @@ export function getCachedBangumiSubject(id) {
     return getCacheEntry(key)?.value || null;
 }
 
-export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airDate = '' } = {}) {
+export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airDate = '', forceRefresh = false } = {}) {
     const query = new URLSearchParams();
     if (title) query.set('title', String(title).slice(0, 300));
     if (titleCn) query.set('titleCn', String(titleCn).slice(0, 300));
     if (titleJp) query.set('titleJp', String(titleJp).slice(0, 300));
     if (airDate) query.set('airDate', String(airDate).slice(0, 10));
+    if (forceRefresh) query.set('refresh', '1');
     if (![...query.keys()].some(key => key.startsWith('title'))) return null;
     if (airDate && !hasYucSeasonData(airDate)) return null;
 
     try {
-        const direct = await getYucAnimeDirect({ title, titleCn, titleJp, airDate });
+        const direct = await getYucAnimeDirect({ title, titleCn, titleJp, airDate, forceRefresh });
         if (direct) {
             const season = yucSeasonFromDate(airDate);
             return { source: 'yuc.wiki', season, sourceUrl: `https://yuc.wiki/${season}/`, ...direct };
@@ -377,7 +378,7 @@ export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airD
                 || updatePeriodFromTime(data.schedule.updateTime);
         }
         return data;
-    }, 6 * 60 * 60 * 1000);
+    }, 6 * 60 * 60 * 1000, { forceRefresh });
 }
 
 export function getYucSeasonList(season) {

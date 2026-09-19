@@ -18,7 +18,7 @@ function fetchYucPage(season) {
             path: `/${season}/`,
             method: 'GET',
             headers: {
-                'User-Agent': 'AnimaList/1.2.1 (+desktop direct yuc reader)',
+                'User-Agent': 'AnimaList/1.3.0 (+desktop direct yuc reader)',
                 Accept: 'text/html,application/xhtml+xml',
                 'Accept-Encoding': 'identity',
             },

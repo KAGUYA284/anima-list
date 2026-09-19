@@ -163,6 +163,10 @@ export function renderSettingsPage() {
                     <button class="btn btn-secondary" id="settingsImportBtn">选择导入</button>
                 </div>
                 <div class="settings-row">
+                    <span class="settings-label">更新番剧信息</span>
+                    <button class="btn btn-secondary" id="refreshAnimeMetadataBtn" ${state.animeList.length ? '' : 'disabled'}>更新全部</button>
+                </div>
+                <div class="settings-row">
                     <span class="settings-label">清空所有番剧</span>
                     <button class="btn btn-danger-outline" id="clearAnimeListBtn" ${state.animeList.length ? '' : 'disabled'}>清空全部</button>
                 </div>

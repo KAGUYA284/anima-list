@@ -76,7 +76,7 @@ function proxyImage(url, origin) {
             port: 443,
             path: `${url.pathname}${url.search}`,
             method: 'GET',
-            headers: { 'User-Agent': 'AnimaList/1.2.1' },
+            headers: { 'User-Agent': 'AnimaList/1.3.0' },
         }, upstream => {
             const contentType = String(upstream.headers['content-type'] || '').split(';')[0];
             if (upstream.statusCode !== 200 || !/^image\/(?:jpeg|png|webp|gif)$/.test(contentType)) {
@@ -209,8 +209,26 @@ function updatePeriodFromBroadcast(value) {
     if (/深夜|凌晨/.test(text)) return '深夜';
     if (/晚间|晚上/.test(text)) return '晚间';
     if (/下午/.test(text)) return '下午';
-    if (/上午|早晨/.test(text)) return '上午';
+    if (/上午|早晨|早间/.test(text)) return '上午';
     return '';
+}
+
+function scheduleFromBroadcast(value, season) {
+    const broadcast = htmlText(value);
+    const weekDayNames = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 };
+    const weekDayMatch = /周([一二三四五六日天])/.exec(broadcast);
+    const timeMatch = /(?:^|\s)((?:[01]?\d|2\d):[0-5]\d)/.exec(broadcast);
+    const updateTime = timeMatch?.[1]?.padStart(5, '0') || '';
+    const airDate = fullYucDate(broadcast, season);
+    return {
+        dateText: broadcast,
+        airDate,
+        updateWeekDay: weekDayNames[weekDayMatch?.[1]] || weekDayFromDate(airDate),
+        updateTime,
+        updatePeriod: updatePeriodFromBroadcast(broadcast) || updatePeriodFromTime(updateTime),
+        broadcast,
+        isPreview: true,
+    };
 }
 
 function parseStaff(staffHtml) {
@@ -300,9 +318,11 @@ function parseYucPage(html, season) {
         });
     }
 
-    return schedules.map(schedule => {
-        const match = details.map(detail => ({
+    const matchedDetails = new Set();
+    const records = schedules.map(schedule => {
+        const match = details.map((detail, index) => ({
             detail,
+            index,
             score: Math.max(
                 schedule.imageUrl && detail.imageUrl && schedule.imageUrl === detail.imageUrl ? 100 : 0,
                 titleScore(schedule.title, detail.titleCn),
@@ -310,6 +330,7 @@ function parseYucPage(html, season) {
             ),
         })).sort((left, right) => right.score - left.score)[0];
         const detail = match?.score >= 55 ? match.detail : null;
+        if (detail) matchedDetails.add(match.index);
         const updatePeriod = updatePeriodFromBroadcast(detail?.broadcast) || schedule.updatePeriod;
         return {
             title: detail?.titleCn || schedule.title,
@@ -318,9 +339,23 @@ function parseYucPage(html, season) {
             imageUrl: schedule.imageUrl,
             broadcast: detail?.broadcast || '',
             staff: detail?.staff || {},
-            schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '' },
+            schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '', isPreview: false },
         };
-    }).filter(record => record.title || record.titleCn || record.titleJp);
+    });
+    details.forEach((detail, index) => {
+        if (matchedDetails.has(index)) return;
+        const title = detail.titleCn || detail.titleJp;
+        records.push({
+            title,
+            titleCn: detail.titleCn,
+            titleJp: detail.titleJp,
+            imageUrl: detail.imageUrl,
+            broadcast: detail.broadcast,
+            staff: detail.staff,
+            schedule: { title, ...scheduleFromBroadcast(detail.broadcast, season) },
+        });
+    });
+    return records.filter(record => record.title || record.titleCn || record.titleJp);
 }
 
 function matchYucAnime(records, titles) {
@@ -357,7 +392,7 @@ function downloadYucPage(path, transport = https) {
             path,
             method: 'GET',
             headers: {
-                'User-Agent': 'AnimaList/1.2.1 (+local anime tracker)',
+                'User-Agent': 'AnimaList/1.3.0 (+local anime tracker)',
                 Accept: 'text/html,application/xhtml+xml',
                 'Accept-Encoding': 'identity',
             },
@@ -390,6 +425,7 @@ async function fetchYucAnime(event, origin) {
     const season = yucSeasonFromDate(params.airDate);
     if (season < '201910') return response(200, null, { 'Cache-Control': 'public, max-age=21600' }, origin);
     const path = `/${season}/`;
+    const forceRefresh = params.refresh === '1';
     const respondFromRecords = records => {
         const result = matchYucAnime(records, titles);
         return response(200, result ? {
@@ -400,7 +436,7 @@ async function fetchYucAnime(event, origin) {
         } : null, { 'Cache-Control': 'public, max-age=21600' }, origin);
     };
     const cached = yucPageCache.get(season);
-    if (cached?.expiresAt > Date.now()) return respondFromRecords(cached.records);
+    if (!forceRefresh && cached?.expiresAt > Date.now()) return respondFromRecords(cached.records);
 
     try {
         // yuc.wiki 当前 HTTPS 证书已过期，但同一固定主机公开提供 HTTP 200 页面。
@@ -418,6 +454,7 @@ async function fetchYucAnime(event, origin) {
 async function fetchYucSeason(event, origin) {
     const params = { ...(event.queryStringParameters || {}), ...(event.queryString || {}) };
     const season = String(params.season || '');
+    const forceRefresh = params.refresh === '1';
     if (!isYucSeason(season)) return response(400, { error: 'Invalid season' }, {}, origin);
     if (season < '201910') {
         return response(200, {
@@ -428,7 +465,7 @@ async function fetchYucSeason(event, origin) {
         }, { 'Cache-Control': 'public, max-age=21600' }, origin);
     }
     const cached = yucPageCache.get(season);
-    if (cached?.expiresAt > Date.now()) {
+    if (!forceRefresh && cached?.expiresAt > Date.now()) {
         return response(200, {
             source: 'yuc.wiki',
             season,
@@ -514,7 +551,7 @@ exports.main_handler = async event => {
             path: targetPath,
             method,
             headers: {
-                'User-Agent': 'AnimaList/1.2.1',
+                'User-Agent': 'AnimaList/1.3.0',
                 ...(method === 'POST' ? {
                     'Content-Type': 'application/json',
                     'Content-Length': Buffer.byteLength(body),

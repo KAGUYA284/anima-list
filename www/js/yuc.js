@@ -56,7 +56,7 @@ export function updatePeriodFromBroadcast(value) {
     if (/深夜|凌晨/.test(text)) return '深夜';
     if (/晚间|晚上/.test(text)) return '晚间';
     if (/下午/.test(text)) return '下午';
-    if (/上午|早晨/.test(text)) return '上午';
+    if (/上午|早晨|早间/.test(text)) return '上午';
     return '';
 }
 
@@ -124,6 +124,24 @@ function weekDayFromDate(value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return 0;
     const day = new Date(`${value}T00:00:00`).getDay();
     return day === 0 ? 7 : day;
+}
+
+function scheduleFromBroadcast(value, season) {
+    const broadcast = cleanText(value);
+    const weekDayNames = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 };
+    const weekDayMatch = /周([一二三四五六日天])/.exec(broadcast);
+    const timeMatch = /(?:^|\s)((?:[01]?\d|2\d):[0-5]\d)/.exec(broadcast);
+    const updateTime = timeMatch?.[1]?.padStart(5, '0') || '';
+    const airDate = fullYucDate(broadcast, season);
+    return {
+        dateText: broadcast,
+        airDate,
+        updateWeekDay: weekDayNames[weekDayMatch?.[1]] || weekDayFromDate(airDate),
+        updateTime,
+        updatePeriod: updatePeriodFromBroadcast(broadcast) || updatePeriodFromTime(updateTime),
+        broadcast,
+        isPreview: true,
+    };
 }
 
 function imageOf(element) {
@@ -196,19 +214,33 @@ export function parseYucHtml(html, season) {
         });
     }
 
-    const details = [...documentNode.querySelectorAll('table[width="500px"]')].map(table => ({
-        titleCn: textOf(table.querySelector('[class^="title_cn_"]')),
-        titleJp: textOf(table.querySelector('[class^="title_jp_"]')),
-        broadcast: textOf(table.querySelector('[class^="broadcast_"]')),
-        staff: parseStaff(table.querySelector('[class^="staff_"]')),
-    }));
+    const details = [...documentNode.querySelectorAll('table[width="500px"]')].map(table => {
+        const titleCn = textOf(table.querySelector('[class^="title_cn_"]'));
+        const titleJp = textOf(table.querySelector('[class^="title_jp_"]'));
+        const broadcast = textOf(table.querySelector('[class^="broadcast_"]'));
+        return {
+            titleCn,
+            titleJp,
+            imageUrl: imageOf(table.parentElement?.previousElementSibling?.querySelector('img')),
+            broadcast,
+            staff: parseStaff(table.querySelector('[class^="staff_"]')),
+            schedule: { title: titleCn || titleJp, ...scheduleFromBroadcast(broadcast, season) },
+        };
+    }).filter(detail => detail.titleCn || detail.titleJp);
 
-    return schedules.map(schedule => {
-        const match = details.map(detail => ({
+    const matchedDetails = new Set();
+    const records = schedules.map(schedule => {
+        const match = details.map((detail, index) => ({
             detail,
-            score: Math.max(titleScore(schedule.title, detail.titleCn), titleScore(schedule.title, detail.titleJp)),
+            index,
+            score: Math.max(
+                schedule.imageUrl && detail.imageUrl && schedule.imageUrl === detail.imageUrl ? 100 : 0,
+                titleScore(schedule.title, detail.titleCn),
+                titleScore(schedule.title, detail.titleJp),
+            ),
         })).sort((left, right) => right.score - left.score)[0];
         const detail = match?.score >= 55 ? match.detail : null;
+        if (detail) matchedDetails.add(match.index);
         const updatePeriod = updatePeriodFromBroadcast(detail?.broadcast) || schedule.updatePeriod;
         return {
             title: detail?.titleCn || schedule.title,
@@ -217,9 +249,22 @@ export function parseYucHtml(html, season) {
             imageUrl: schedule.imageUrl,
             broadcast: detail?.broadcast || '',
             staff: detail?.staff || {},
-            schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '' },
+            schedule: { ...schedule, updatePeriod, broadcast: detail?.broadcast || '', isPreview: false },
         };
-    }).filter(record => record.title || record.titleCn || record.titleJp);
+    });
+    details.forEach((detail, index) => {
+        if (matchedDetails.has(index)) return;
+        records.push({
+            title: detail.titleCn || detail.titleJp,
+            titleCn: detail.titleCn,
+            titleJp: detail.titleJp,
+            imageUrl: detail.imageUrl,
+            broadcast: detail.broadcast,
+            staff: detail.staff,
+            schedule: detail.schedule,
+        });
+    });
+    return records.filter(record => record.title || record.titleCn || record.titleJp);
 }
 
 async function fetchText(url, timeoutMs = 15000) {
@@ -260,11 +305,11 @@ async function fetchYucHtml(season) {
     throw lastError || new Error('Yuc 页面请求失败');
 }
 
-export async function getYucSeasonList(season, { useProxy = true } = {}) {
+export async function getYucSeasonList(season, { useProxy = true, forceRefresh = false } = {}) {
     if (!SEASON_PATTERN.test(season)) throw new Error('季度参数无效');
     if (!hasYucSeasonData(season)) return [];
     const cached = yucCache.get(season);
-    if (cached?.expiresAt > Date.now()) return cached.records;
+    if (!forceRefresh && cached?.expiresAt > Date.now()) return cached.records;
     if (yucInFlight.has(season)) return yucInFlight.get(season);
 
     const promise = (async () => {
@@ -279,7 +324,7 @@ export async function getYucSeasonList(season, { useProxy = true } = {}) {
         }
 
         if (!useProxy) throw lastError || new Error('Yuc 页面请求失败');
-        const response = await fetchText(`${PROXY_BASE_URL}/yuc/season?season=${season}`);
+        const response = await fetchText(`${PROXY_BASE_URL}/yuc/season?season=${season}${forceRefresh ? '&refresh=1' : ''}`);
         const payload = JSON.parse(response);
         const records = Array.isArray(payload?.records) ? payload.records : [];
         if (records.length === 0) throw lastError || new Error('代理未返回番剧表');
@@ -308,6 +353,6 @@ export function matchYucAnime(records, titles) {
 export async function getYucAnimeDirect(options = {}) {
     const season = yucSeasonFromDate(options.airDate);
     if (!hasYucSeasonData(season)) return null;
-    const records = await getYucSeasonList(season, { useProxy: false });
+    const records = await getYucSeasonList(season, { useProxy: false, forceRefresh: options.forceRefresh });
     return matchYucAnime(records, [options.title, options.titleCn, options.titleJp]);
 }

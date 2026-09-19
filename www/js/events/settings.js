@@ -2,11 +2,12 @@
 // 事件处理 · 设置页 - Anime Tracker
 // ============================================================
 
-import { clearAnimeList, setState, state, updateSettings } from '../store.js';
+import { clearAnimeList, replaceAnimeList, setState, state, updateSettings } from '../store.js';
 import { SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from '../constants.js';
 import { showToast } from '../utils.js';
 import { buildExportFilter } from './io.js';
 import { shouldRenderSyncConflictPanel } from '../sync-core.js';
+import { applyRefreshedMetadata, refreshAnimeMetadataList } from '../metadata-refresh.js';
 import {
     getSyncStatus, login, logout, register, resolveConflict, syncNow,
 } from '../sync-service.js';
@@ -109,6 +110,32 @@ export function attachSettingsEvents() {
             }
         });
     }
+
+    document.getElementById('refreshAnimeMetadataBtn')?.addEventListener('click', async event => {
+        if (!state.animeList.length) return;
+        const button = event.currentTarget;
+        const initial = [...state.animeList];
+        button.disabled = true;
+        button.textContent = `更新中 0/${initial.length}`;
+        try {
+            const result = await refreshAnimeMetadataList(initial, {
+                onProgress: (completed, total) => {
+                    if (document.contains(button)) button.textContent = `更新中 ${completed}/${total}`;
+                },
+            });
+            const refreshedById = new Map(result.records.map(record => [record.id, record]));
+            const latest = state.animeList.map(record => applyRefreshedMetadata(record, refreshedById.get(record.id)));
+            if (!replaceAnimeList(latest)) throw new Error('更新结果无法保存到本地');
+            const failure = result.failedCount ? `，${result.failedCount} 部更新失败` : '';
+            setTimeout(() => showToast(`番剧信息更新完成：${result.updatedCount} 部有变化${failure}`), 0);
+        } catch (error) {
+            showToast(error.message || '番剧信息更新失败');
+            if (document.contains(button)) {
+                button.disabled = false;
+                button.textContent = '更新全部';
+            }
+        }
+    });
 
     document.getElementById('clearAnimeListBtn')?.addEventListener('click', () => {
         if (!state.animeList.length) return;

@@ -65,6 +65,7 @@ test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () =
     assert.equal(records[0].schedule.updateWeekDay, 4);
     assert.equal(records[0].schedule.updateTime, '22:00');
     assert.equal(records[0].schedule.updatePeriod, '深夜');
+    assert.equal(records[0].schedule.isPreview, false);
     assert.deepEqual(records[0].staff, {
         originalWork: 'Bushiroad',
         director: '梅津朋美',
@@ -75,6 +76,28 @@ test('Yuc 季度页解析并通过封面映射播出时间与制作信息', () =
         animationStudio: 'NICHICALINE',
     });
     assert.equal(_test.matchYucAnime(records, ['バンドリ！ ゆめ∞みた']), records[0]);
+});
+
+test('Yuc 预告版只有介绍卡片时仍生成季度记录', () => {
+    const html = `
+        <div style="float:left"><img src="http://i0.hdslb.com/preview.jpg"></div>
+        <div><table width="500px"><tbody><tr>
+            <td class="title_main_r"><p class="title_cn_r1">预告版作品</p>
+            <p class="title_jp_r">予告版作品</p></td></tr><tr>
+            <td class="staff_r2">导演：测试导演<br>动画制作：测试制作</td>
+            <td><p class="broadcast_r">10/3周六早间</p></td>
+        </tr></tbody></table></div>`;
+
+    const records = _test.parseYucPage(html, '202610');
+    assert.equal(records.length, 1);
+    assert.equal(records[0].title, '预告版作品');
+    assert.equal(records[0].titleJp, '予告版作品');
+    assert.equal(records[0].imageUrl, 'https://i0.hdslb.com/preview.jpg');
+    assert.equal(records[0].schedule.airDate, '2026-10-03');
+    assert.equal(records[0].schedule.updateWeekDay, 6);
+    assert.equal(records[0].schedule.updatePeriod, '上午');
+    assert.equal(records[0].schedule.updateTime, '');
+    assert.equal(records[0].schedule.isPreview, true);
 });
 
 test('Yuc 季度路径由首播日期确定', () => {
