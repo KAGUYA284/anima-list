@@ -53,3 +53,13 @@ test('extractAnimationStudio prefers the animation studio relation and never use
     ]), 'Studio Bind');
     assert.equal(extractAnimationStudio([], [{ key: '原作', value: '理不尽な孫の手' }]), '');
 });
+
+test('yesterday reminders wrap across Monday and include a series whose final episode was yesterday', () => {
+    const result = getReminderItems([
+        { title: '昨日完结', status: 'watching', type: 'chasing', updateWeekDay: 7, airDate: '2026-10-18', totalEpisodes: 1 },
+        { title: '今天首播', status: 'want', type: 'chasing', updateWeekDay: 1, airDate: '2026-10-19', totalEpisodes: 12 },
+        { title: '尚未首播', status: 'want', type: 'chasing', updateWeekDay: 7, airDate: '2026-10-25', totalEpisodes: 12 },
+    ], 1, new Date('2026-10-19T12:00:00'));
+    assert.deepEqual(result.yesterday.map(anime => anime.title), ['昨日完结']);
+    assert.deepEqual(result.today.map(anime => anime.title), ['今天首播']);
+});

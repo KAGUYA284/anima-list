@@ -22,6 +22,7 @@ const manifest = readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8'
 const indexHtml = readFileSync('www/index.html', 'utf8');
 const appEntry = readFileSync('www/js/app.js', 'utf8');
 const electronMain = readFileSync('electron/main.cjs', 'utf8');
+const desktopProfile = readFileSync('electron/data-profile.cjs', 'utf8');
 const webLauncher = readFileSync('scripts/release/启动网页版.cmd', 'utf8');
 const webServer = readFileSync('scripts/release/server.ps1', 'utf8');
 const proxySource = readFileSync('scf_bangumi_proxy.js', 'utf8');
@@ -61,7 +62,7 @@ if (!webSource.includes('代理\n') && !webSource.includes('代理\r\n')) {
 if (!electronMain.includes('contextIsolation: true') || !electronMain.includes('nodeIntegration: false') || !electronMain.includes('sandbox: true')) {
     throw new Error('Electron 便携版必须启用隔离渲染安全配置');
 }
-if (!electronMain.includes("app.setPath('userData'") || !electronMain.includes('.anima-list-cache-test')) {
+if (!desktopProfile.includes("app.setPath('userData'") || !desktopProfile.includes('.anima-list-cache-test')) {
     throw new Error('Electron 缓存测试版缺少独立 userData 配置');
 }
 if (!webLauncher.includes('server.ps1') || !webServer.includes('TcpListener') || !webServer.includes('Start-Process')) {
@@ -109,7 +110,7 @@ if (!webSource.includes('getYucSeasonList') || !webSource.includes('yucScheduleB
 if (!webSource.includes('yucYearFilter') || !webSource.includes('yucQuarterFilter') || !webSource.includes("YUC_MIN_SEASON = '201910'")) {
     throw new Error('新番表缺少年份/季度筛选器或 2019 年 10 月数据边界');
 }
-if (!webSource.includes('searchBangumiForYuc') || !webSource.includes('buildSeasonalAnime') || !webSource.includes("bgmId: subject?.id ? String(subject.id) : ''") || !webSource.includes('{ navigate: false }')) {
+if (!webSource.includes('searchBangumiForYuc') || !webSource.includes('buildSeasonalAnime') || !webSource.includes("bgmId: subject?.id ? String(subject.id) : ''") || !webSource.includes('{ navigate: false, render: false }')) {
     throw new Error('新番表添加未保留页面或未通过 Bangumi 匹配元数据');
 }
 if (!webSource.includes('findExistingSeasonalAnime') || !webSource.includes('getBangumiSubject(bangumi.id)')) {

@@ -1,5 +1,5 @@
 import { APP_VERSION, SCHEMA_VERSION, STATUS_CONFIG, TYPE_CONFIG } from './constants.js';
-import { generateId } from './utils.js';
+import { generateId, safeImageUrl } from './utils.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const UPDATE_TIME_PATTERN = /^(?:[01]\d|2\d):[0-5]\d$/;
@@ -22,6 +22,30 @@ function cleanDate(value) {
         : '';
 }
 
+function cleanTimestamp(value) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value)) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
+export function normalizeAnimeMetadata(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const staff = {};
+    for (const key of ['originalWork', 'director', 'assistantDirector', 'seriesComposition', 'characterDesign', 'animationCharacterDesign', 'animationStudio']) {
+        const text = cleanString(value.staff?.[key], 2000).trim();
+        if (text) staff[key] = text;
+    }
+    return {
+        summary: cleanString(value.summary),
+        coverUrl: safeImageUrl(value.coverUrl),
+        thumbnailUrl: safeImageUrl(value.thumbnailUrl),
+        staff,
+        updatedAt: cleanTimestamp(value.updatedAt),
+        bangumiUpdatedAt: cleanTimestamp(value.bangumiUpdatedAt),
+        yucUpdatedAt: cleanTimestamp(value.yucUpdatedAt),
+    };
+}
+
 function cleanEpisodeNotes(value, totalEpisodes) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
     const result = {};
@@ -31,7 +55,8 @@ function cleanEpisodeNotes(value, totalEpisodes) {
         if (!noteValue || typeof noteValue !== 'object') continue;
         const note = cleanString(noteValue.note, 10000).trim();
         const rating = Math.min(5, Math.max(0, Number(noteValue.rating) || 0));
-        if (note || rating) result[number] = { note, rating };
+        const watchedAt = cleanTimestamp(noteValue.watchedAt);
+        if (note || rating || watchedAt) result[number] = { note, rating, ...(watchedAt ? { watchedAt } : {}) };
     }
     return result;
 }
@@ -70,6 +95,9 @@ export function normalizeAnimeRecord(value, { requireTitle = true } = {}) {
         completedDate: cleanDate(value.completedDate),
         startDate: cleanDate(value.startDate),
         bgmId,
+        titleJp: cleanString(value.titleJp, 300).trim(),
+        yucKey: cleanString(value.yucKey, 700).trim(),
+        metadata: normalizeAnimeMetadata(value.metadata),
         episodeNotes: cleanEpisodeNotes(value.episodeNotes, totalEpisodes),
         createdAt: cleanString(value.createdAt, 40) || now,
         updatedAt: cleanString(value.updatedAt, 40) || now,

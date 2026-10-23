@@ -6,6 +6,7 @@ import { APP_VERSION, SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from 
 import { state } from '../store.js';
 import { getStoredUser, getSyncStatus } from '../sync-service.js';
 import { escHtml } from '../utils.js';
+import { loadOperationBackups } from '../backups.js';
 
 function formatSyncTime(value) {
     const timestamp = Number(value);
@@ -21,6 +22,7 @@ export function renderSettingsPage() {
     const apiEndpoint = state.settings.apiEndpoint;
     const showAnimeDetails = state.settings.showAnimeDetails;
     const listOrder = state.settings.listOrder;
+    const updateOrderStart = state.settings.updateOrderStart === 'today' ? 'today' : 'yesterday';
     const syncUser = getStoredUser();
     const syncStatus = getSyncStatus();
     const localSyncUnavailable = state.animeList.length === 0;
@@ -28,6 +30,8 @@ export function renderSettingsPage() {
     const syncUnavailable = localSyncUnavailable || remoteSyncUnavailable;
     const syncUnavailableMessage = remoteSyncUnavailable ? '云端数据为空，不可同步' : '本地番剧列表为空，暂不可同步';
     const remoteSyncTime = formatSyncTime(syncStatus.conflict?.remote?.serverUpdatedAt);
+    const backups = loadOperationBackups();
+    const syncBusy = syncStatus.phase === 'syncing';
     return `
         <header class="header">
             <div class="header-content">
@@ -108,10 +112,38 @@ export function renderSettingsPage() {
                         <button class="toggle-btn ${listOrder !== 'update' ? 'active' : ''}" data-list-order="time">时间次序</button>
                     </div>
                     <div class="settings-order-help" id="listOrderHelp" hidden>
-                        <strong>更新次序：</strong>从昨天开始按最近更新日倒序（例如周三依次显示周二、周一、周日）；同一天优先显示较晚的时段和更新时间。<br>
+                        <strong>更新次序：</strong>按所选起点倒序展示最近更新日。周三选择“当天为准”时依次显示周三、周二、周一、周日；选择“昨天为准”时依次显示周二、周一、周日。同一天优先显示较晚的时段和更新时间。<br>
                         <strong>时间次序：</strong>保持原有周一至周日的固定顺序。
                     </div>
                 </div>
+                ${listOrder === 'update' ? `
+                    <div class="settings-row settings-row-wrap">
+                        <span class="settings-label">更新次序起点</span>
+                        <div class="settings-toggle">
+                            <button class="toggle-btn ${updateOrderStart === 'today' ? 'active' : ''}" data-update-order-start="today">当天为准</button>
+                            <button class="toggle-btn ${updateOrderStart === 'yesterday' ? 'active' : ''}" data-update-order-start="yesterday">昨天为准</button>
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+
+            <div class="settings-section">
+                <h2 class="settings-section-title">启动提醒</h2>
+                <div class="settings-row">
+                    <span class="settings-label">显示当日更新</span>
+                    <div class="settings-toggle">
+                        <button class="toggle-btn ${state.settings.startupToday !== false ? 'active' : ''}" data-startup-setting="startupToday" data-enabled="true">开启</button>
+                        <button class="toggle-btn ${state.settings.startupToday === false ? 'active' : ''}" data-startup-setting="startupToday" data-enabled="false">关闭</button>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-label">显示昨日更新</span>
+                    <div class="settings-toggle">
+                        <button class="toggle-btn ${state.settings.startupYesterday ? 'active' : ''}" data-startup-setting="startupYesterday" data-enabled="true">开启</button>
+                        <button class="toggle-btn ${!state.settings.startupYesterday ? 'active' : ''}" data-startup-setting="startupYesterday" data-enabled="false">关闭</button>
+                    </div>
+                </div>
+                <p class="settings-hint">可同时开启；全部关闭时，启动不弹出追番提醒。</p>
             </div>
 
             <div class="settings-section">
@@ -124,10 +156,15 @@ export function renderSettingsPage() {
                         </div>
                         <div class="sync-status sync-status-${escHtml(syncStatus.phase)}" id="syncStatusText">${escHtml(syncStatus.message)}</div>
                         <div class="sync-actions">
-                            <button class="btn btn-primary" id="syncNowBtn" ${syncUnavailable ? `disabled title="${syncUnavailableMessage}"` : ''}>立即同步</button>
+                            <button class="btn btn-primary" id="syncNowBtn" ${syncUnavailable || syncBusy ? `disabled title="${syncUnavailable ? syncUnavailableMessage : '正在同步'}"` : ''}>立即同步</button>
                             <button class="btn btn-secondary" id="syncLogoutBtn">退出登录</button>
                         </div>
                         ${syncUnavailable ? `<div class="sync-status sync-status-protected">${syncUnavailableMessage}</div>` : ''}
+                        <div class="sync-actions">
+                            <button class="btn btn-secondary" id="syncInitializeBtn" ${localSyncUnavailable || syncBusy ? 'disabled' : ''}>初始化云端</button>
+                            <button class="btn btn-secondary" id="syncRestoreBtn" ${syncBusy ? 'disabled' : ''}>从云端恢复</button>
+                        </div>
+                        <p class="settings-hint">初始化仅在云端为空时上传本地记录；恢复会读取云端记录，本地非空时先自动备份。</p>
                     ` : `
                         <label class="sync-field"><span class="settings-label">邮箱</span><input class="form-input" id="syncEmail" type="email" autocomplete="username" maxlength="254"></label>
                         <label class="sync-field"><span class="settings-label">密码</span><input class="form-input" id="syncPassword" type="password" autocomplete="current-password" minlength="${SYNC_PASSWORD_MIN_LENGTH}" maxlength="${SYNC_PASSWORD_MAX_LENGTH}" placeholder="${SYNC_PASSWORD_MIN_LENGTH}–${SYNC_PASSWORD_MAX_LENGTH} 个字符"></label>
@@ -170,6 +207,11 @@ export function renderSettingsPage() {
                     <span class="settings-label">清空所有番剧</span>
                     <button class="btn btn-danger-outline" id="clearAnimeListBtn" ${state.animeList.length ? '' : 'disabled'}>清空全部</button>
                 </div>
+                <div class="operation-backups">
+                    <h3 class="settings-section-title">自动备份（最近 3 份）</h3>
+                    <p class="settings-hint">导入、清空和云端覆盖前保存，可恢复进度、评分及感想。</p>
+                    ${backups.length ? backups.map(backup => `<div class="backup-row"><div><span>${escHtml(backup.reason)}</span><small>${escHtml(formatSyncTime(Date.parse(backup.createdAt)))} · ${backup.backup.records.length} 部</small></div><button class="btn btn-secondary" data-restore-backup="${escHtml(backup.id)}">恢复</button></div>`).join('') : '<p class="settings-hint">暂无自动备份</p>'}
+                </div>
             </div>
 
             <div class="settings-section">
@@ -177,6 +219,12 @@ export function renderSettingsPage() {
                 <div class="settings-row">
                     <span class="settings-label">版本</span>
                     <span style="color:#9ca3af;font-size:0.875rem;">${APP_VERSION}</span>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="settings-row">
+                    <span class="settings-label">使用说明</span>
+                    <button class="btn btn-secondary" id="openUserGuideBtn">查看说明</button>
                 </div>
             </div>
         </div>

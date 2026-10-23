@@ -2,6 +2,9 @@ const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { app, BrowserWindow, ipcMain, net, safeStorage, session, shell } = require('electron');
 const http = require('node:http');
 const path = require('node:path');
+const { configureDataProfile } = require('./data-profile.cjs');
+
+configureDataProfile(app);
 
 const YUC_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const YUC_TIMEOUT_MS = 15000;
@@ -18,7 +21,7 @@ function fetchYucPage(season) {
             path: `/${season}/`,
             method: 'GET',
             headers: {
-                'User-Agent': 'AnimaList/1.3.0 (+desktop direct yuc reader)',
+                'User-Agent': 'AnimaList/1.3.1 (+desktop direct yuc reader)',
                 Accept: 'text/html,application/xhtml+xml',
                 'Accept-Encoding': 'identity',
             },
@@ -82,13 +85,6 @@ ipcMain.handle('sync.fetch', async (_event, rawUrl, options = {}) => {
     if (body.length > 2 * 1024 * 1024) throw new Error('同步服务响应过大');
     return { status: response.status, ok: response.ok, body };
 });
-
-// 缓存测试版随包放置此标记文件。其浏览器缓存、Local Storage、IndexedDB
-// 等数据固定写入解压目录，便于携带和复现；正式便携版不放置该标记。
-const portableCacheMarker = path.join(path.dirname(process.execPath), '.anima-list-cache-test');
-if (existsSync(portableCacheMarker)) {
-    app.setPath('userData', path.join(path.dirname(process.execPath), 'test-user-data'));
-}
 
 function createWindow() {
     const window = new BrowserWindow({

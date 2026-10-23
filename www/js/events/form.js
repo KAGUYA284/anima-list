@@ -21,6 +21,7 @@ export function attachFormEvents(anime) {
         updatePeriod: anime?.updatePeriod || '',
     };
     let selectedBgmId = anime?.bgmId || '';
+    let selectedTitleJp = anime?.titleJp || '';
 
     const formAirDate = document.getElementById('formAirDate');
     const formUpdateWeekDay = document.getElementById('formUpdateWeekDay');
@@ -254,7 +255,9 @@ export function attachFormEvents(anime) {
             updatePeriod,
             completedDate,
             startDate,
-            bgmId: selectedBgmId || (anime?.bgmId || '')
+            bgmId: selectedBgmId || (anime?.bgmId || ''),
+            titleJp: selectedTitleJp,
+            yucKey: selectedBgmId === anime?.bgmId ? anime?.yucKey || '' : '',
         };
 
         if (isEdit) {
@@ -326,6 +329,7 @@ export function attachFormEvents(anime) {
                     try {
                         const detail = await getBangumiSubject(id);
                         if (!detail) throw new Error('No data');
+                        selectedTitleJp = detail.name || '';
 
                         document.getElementById('formTitle').value = detail.name_cn || detail.name;
                         const ftEl = document.getElementById('formTotal');

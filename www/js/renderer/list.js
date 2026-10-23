@@ -5,11 +5,12 @@
 import { QUARTER_ORDER, STATUS_CONFIG, TYPE_CONFIG, WEEK_DAYS } from '../constants.js';
 import { getBangumiImageUrl, getBangumiSubject, getCachedBangumiSubject, hydrateBangumiImages } from '../api.js';
 import { buildGroups } from '../grouping.js';
-import { getFilteredAnime, state } from '../store.js';
+import { getAnimeById, getFilteredAnime, state } from '../store.js';
 import { loadCollapsed } from '../storage.js';
 import { escHtml, renderStars, safeImageUrl } from '../utils.js';
 import { hasYucSeasonData } from '../yuc.js';
 import { compareChasingForDisplay } from '../list-order.js';
+import { getLibraryMetadata, persistLibraryMetadata, resolveLibraryThumbnail } from '../library-cache.js';
 
 /** 渲染列表页 */
 export function renderListPage() {
@@ -139,7 +140,7 @@ function renderAnimeList(animeList) {
                 if (anime.type === 'binge') binge.push(anime);
                 else chasing.push(anime);
             });
-            chasing.sort((a, b) => compareChasingForDisplay(a, b, state.settings.listOrder, sortNow));
+            chasing.sort((a, b) => compareChasingForDisplay(a, b, state.settings.listOrder, sortNow, state.settings.updateOrderStart));
             binge.sort((a, b) => {
                 const dateA = a.startDate || '';
                 const dateB = b.startDate || '';
@@ -162,7 +163,11 @@ function renderAnimeList(animeList) {
 /** 渲染单个番剧卡片 */
 const coverCache = {};
 
-function getCachedCover(bgmId) {
+function getCachedCover(anime) {
+    const metadata = getLibraryMetadata(anime);
+    const savedCover = safeImageUrl(metadata.thumbnailUrl || metadata.coverUrl);
+    if (savedCover) return savedCover;
+    const bgmId = anime.bgmId;
     if (!bgmId) return '';
     if (coverCache[bgmId]) return coverCache[bgmId];
     const persistedSubject = getCachedBangumiSubject(bgmId);
@@ -180,17 +185,12 @@ function renderAnimeCard(anime) {
     const showYucTime = hasYucSeasonData(anime.airDate);
 
     if (state.settings.listStyle === 'cover') {
-        const cachedCover = getCachedCover(anime.bgmId);
+        const cachedCover = getCachedCover(anime);
         return renderSwipeRow(anime, `
             <div class="anime-card anime-card-cover" data-id="${escHtml(anime.id)}" data-bgmid="${escHtml(anime.bgmId || '')}">
                 <div class="card-cover-thumb">
-                    ${cachedCover
-                        ? `<img src="${getBangumiImageUrl(cachedCover)}" data-direct-src="${safeImageUrl(cachedCover)}" onerror="if(this.src!==this.dataset.directSrc){this.src=this.dataset.directSrc}else{this.style.display='none'}" alt="" class="card-cover-img" loading="lazy">`
-                        : `<div class="card-cover-placeholder">${escHtml(anime.title.charAt(0))}</div>`
-                    }
-                    ${!cachedCover && anime.bgmId
-                        ? `<img class="card-cover-img card-cover-lazy" data-src="${escHtml(anime.bgmId)}" alt="" style="display:none;">`
-                        : ''}
+                    <div class="card-cover-placeholder">${escHtml(anime.title.charAt(0))}</div>
+                    <img class="card-cover-img" data-library-id="${escHtml(anime.id)}" data-library-pending="true" data-direct-src="${escHtml(cachedCover)}" alt="" loading="lazy" style="display:none;">
                 </div>
                 <div class="card-cover-info">
                     <div class="card-title">${escHtml(anime.title)}</div>
@@ -255,47 +255,59 @@ function renderSwipeRow(anime, cardHtml) {
 }
 
 /** 异步加载列表中所有番剧的封面图片 */
-export async function loadListCovers() {
-    const lazyImgs = document.querySelectorAll('.card-cover-lazy');
-    if (lazyImgs.length === 0) return;
-    const bgmIds = [...new Set(Array.from(lazyImgs).map(el => el.dataset.src))];
-
-    function applyCover(bgmId, cover) {
-        document.querySelectorAll('.card-cover-lazy').forEach(el => {
-            if (el.dataset.src !== bgmId) return;
-            const directUrl = safeImageUrl(cover);
-            const primaryUrl = getBangumiImageUrl(cover);
-            let usedFallback = false;
-            el.addEventListener('load', () => {
-                const thumb = el.closest('.card-cover-thumb');
-                const placeholder = thumb?.querySelector('.card-cover-placeholder');
-                if (placeholder) placeholder.style.display = 'none';
-            }, { once: true });
-            el.addEventListener('error', () => {
-                if (!usedFallback && directUrl && primaryUrl !== directUrl) {
-                    usedFallback = true;
-                    el.src = directUrl;
-                } else {
-                    el.style.display = 'none';
+export async function loadListCovers(animeId = '') {
+    const images = [...document.querySelectorAll('.card-cover-img[data-library-id]')]
+        .filter(image => !animeId || image.dataset.libraryId === animeId);
+    let next = 0;
+    const worker = async () => {
+        while (next < images.length) {
+            const image = images[next++];
+            try {
+                let record = getAnimeById(image.dataset.libraryId);
+                if (!record || !image.isConnected) continue;
+                let cover = getCachedCover(record);
+                if (!cover && record.bgmId) {
+                    const subject = await getBangumiSubject(record.bgmId);
+                    persistLibraryMetadata(record.id, { subject });
+                    record = getAnimeById(record.id);
+                    if (!record) continue;
+                    cover = getCachedCover(record);
                 }
-            });
-            el.src = primaryUrl;
-            el.style.display = 'block';
-            el.classList.remove('card-cover-lazy');
-            hydrateBangumiImages(el.parentElement);
-        });
-    }
-
-    await Promise.allSettled(bgmIds.map(async bgmId => {
-        const cachedCover = getCachedCover(bgmId);
-        if (cachedCover) {
-            applyCover(bgmId, cachedCover);
-            return;
+                if (!cover) continue;
+                if (image.dataset.coverBound !== 'true') {
+                    image.dataset.coverBound = 'true';
+                    image.addEventListener('load', () => {
+                        image.closest('.card-cover-thumb')?.querySelector('.card-cover-placeholder')?.style.setProperty('display', 'none');
+                    });
+                    image.addEventListener('error', () => {
+                        if (image.dataset.fallbackUsed !== 'true' && image.dataset.directSrc && image.src !== image.dataset.directSrc) {
+                            image.dataset.fallbackUsed = 'true';
+                            image.src = image.dataset.directSrc;
+                        } else {
+                            image.style.display = 'none';
+                            image.closest('.card-cover-thumb')?.querySelector('.card-cover-placeholder')?.style.removeProperty('display');
+                        }
+                    });
+                }
+                const local = await resolveLibraryThumbnail(record, { fetchMissing: true }).catch(() => null);
+                if (!image.isConnected) continue;
+                delete image.dataset.libraryPending;
+                image.dataset.directSrc = cover;
+                image.style.display = 'block';
+                if (local) {
+                    image.dataset.localThumbnail = 'true';
+                    if (image.src !== local) image.src = local;
+                } else {
+                    delete image.dataset.localThumbnail;
+                    image.dataset.fallbackUsed = 'false';
+                    const remote = getBangumiImageUrl(cover);
+                    if (image.src !== remote) image.src = remote;
+                    hydrateBangumiImages(image.parentElement);
+                }
+            } catch (error) {
+                console.info('[Library] 封面暂不可用', error.message);
+            }
         }
-        const subject = await getBangumiSubject(bgmId);
-        const cover = safeImageUrl(subject?.images?.medium || '');
-        if (!cover) return;
-        coverCache[bgmId] = cover;
-        applyCover(bgmId, cover);
-    }));
+    };
+    await Promise.allSettled(Array.from({ length: Math.min(3, images.length) }, worker));
 }

@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    addAnime, clearAnimeList, DEFAULT_SETTINGS, getAnimeById, getCurrentAnime, setRenderer, setState, state, updateAnime,
+    addAnime, clearAnimeList, DEFAULT_SETTINGS, getAnimeById, getCurrentAnime, setRenderer, setState, state, updateAnime, updateSettings,
 } from '../www/js/store.js';
 
 test('fresh settings default to cover mode and do not expose an update source', () => {
     assert.equal(DEFAULT_SETTINGS.listStyle, 'cover');
     assert.equal(DEFAULT_SETTINGS.listOrder, 'time');
+    assert.equal(DEFAULT_SETTINGS.updateOrderStart, 'yesterday');
     assert.equal(Object.hasOwn(DEFAULT_SETTINGS, 'updateSource'), false);
     assert.equal(Object.hasOwn(DEFAULT_SETTINGS, 'syncApiUrl'), false);
 });
@@ -50,15 +51,26 @@ test('binge completion dates are recorded and cleared with completion state', ()
 });
 
 test('adding from the seasonal schedule can preserve the current page', () => {
+    let renders = 0;
+    setRenderer(() => { renders += 1; });
     setState({ currentPage: 'yucSchedule' });
+    const before = renders;
     assert.equal(addAnime({
         title: 'Season schedule test',
         type: 'chasing',
         status: 'want',
         bgmId: '12345',
-    }, { navigate: false }), true);
+    }, { navigate: false, render: false }), true);
     assert.equal(state.currentPage, 'yucSchedule');
+    assert.equal(renders, before);
     assert.equal(state.animeList.at(-1).bgmId, '12345');
+});
+
+test('update order start is persisted and normalizes an invalid value to yesterday', () => {
+    updateSettings({ updateOrderStart: 'today' }, { render: false });
+    assert.equal(state.settings.updateOrderStart, 'today');
+    updateSettings({ updateOrderStart: 'invalid' }, { render: false });
+    assert.equal(state.settings.updateOrderStart, 'yesterday');
 });
 
 test('clearing the anime list removes every record and stays in settings', () => {

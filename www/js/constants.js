@@ -26,7 +26,7 @@ export const SYNC_API_URL = 'https://anima-list-api.anima-list-api.workers.dev';
 export const SYNC_PASSWORD_MIN_LENGTH = 8;
 export const SYNC_PASSWORD_MAX_LENGTH = 128;
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 
 /** 日本动画季度边界定义（用于番剧按季归类） */
 export const QUARTER_BOUNDARIES = {

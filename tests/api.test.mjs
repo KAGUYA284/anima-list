@@ -11,7 +11,7 @@ const {
     apiFetch, getBangumiEndpointOrder, getBangumiImageUrl, getBangumiSubject, resolveBangumiImageUrl,
     searchBangumi, searchBangumiForYuc, selectBangumiMatch,
 } = await import('../www/js/api.js');
-const { fillMissingAnimeFields } = await import('../www/js/import-enrichment.js');
+const { applyImportedEnrichment, fillMissingAnimeFields } = await import('../www/js/import-enrichment.js');
 
 test('Bangumi images use the image proxy only in proxy mode', () => {
     const image = 'https://lain.bgm.tv/r/800/pic/cover/l/example.jpg';
@@ -180,4 +180,15 @@ test('import enrichment fills missing fields without overwriting local values', 
     assert.equal(enriched.updateWeekDay, 5);
     assert.equal(enriched.updateTime, '22:30');
     assert.equal(enriched.updatePeriod, '晚间');
+});
+
+test('async import completion retains metadata and current episode notes, and ignores a changed subject link', () => {
+    const current = { id: 'local', title: '作品', bgmId: '42', type: 'chasing', totalEpisodes: 12, currentEpisode: 8, episodeNotes: { 8: { note: '刚写下的', watchedAt: '2026-10-23T10:00:00.000Z' } }, metadata: { summary: '已有简介' } };
+    const candidate = { ...current, currentEpisode: 2, episodeNotes: {}, metadata: { summary: '旧简介', coverUrl: 'https://example.test/cover.jpg', staff: { director: '导演' } } };
+    const result = applyImportedEnrichment(current, candidate);
+    assert.equal(result.currentEpisode, 8);
+    assert.equal(result.episodeNotes[8].note, '刚写下的');
+    assert.equal(result.metadata.summary, '已有简介');
+    assert.equal(result.metadata.staff.director, '导演');
+    assert.equal(applyImportedEnrichment({ ...current, bgmId: '99' }, candidate).bgmId, '99');
 });

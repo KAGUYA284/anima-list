@@ -248,7 +248,7 @@ function attachSwipeActions() {
         button.addEventListener('click', event => {
             event.stopPropagation();
             const anime = getAnimeById(button.dataset.cardDelete);
-            if (anime && confirm(`确定要删除《${anime.title}》吗？此操作不可撤销。`)) deleteAnime(anime.id);
+            if (anime && confirm(`确定要删除《${anime.title}》吗？删除后 15 秒内可以撤销。`)) deleteAnime(anime.id);
         });
     });
 }

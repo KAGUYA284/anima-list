@@ -8,9 +8,9 @@ import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { createBackup, readBackup } from '../data.js';
 import { replaceAnimeList, state } from '../store.js';
-import { showToast } from '../utils.js';
+import { escHtml, showToast } from '../utils.js';
 import { buildFilteredData, buildGroups, mergeImport } from '../grouping.js';
-import { enrichImportedAnimeList, fillMissingAnimeFields } from '../import-enrichment.js';
+import { applyImportedEnrichment, enrichImportedAnimeList } from '../import-enrichment.js';
 
 /** 构建导出筛选弹窗内容 */
 export function buildExportFilter() {
@@ -125,14 +125,7 @@ async function completeImportedMetadata(importedRecords) {
     const enrichedById = new Map(enriched.map(record => [record.id, record]));
     const latest = state.animeList.map(record => {
         const candidate = enrichedById.get(record.id);
-        return candidate ? fillMissingAnimeFields(record, {
-            subject: {
-                id: candidate.bgmId,
-                total_episodes: candidate.totalEpisodes,
-                date: candidate.airDate,
-            },
-            yuc: { schedule: candidate },
-        }) : record;
+        return candidate ? applyImportedEnrichment(record, candidate) : record;
     });
     if (replaceAnimeList(latest)) showToast('导入番剧信息补全完成并已保存');
 }
@@ -145,17 +138,35 @@ function doImportJson(imported) {
         alert(error.message);
         return;
     }
-    const { merged, localCount, importedCount } = mergeImport(state.animeList, parsed.records);
-    const rejected = parsed.errors.length ? `\n忽略无效记录：${parsed.errors.length} 条` : '';
-    const msg = `本地：${localCount} 条\n导入数据：${importedCount} 条${rejected}\n合并后：${merged.length} 条\n\n相同 Bangumi 条目或标准化名称将被新数据覆盖，确认导入？`;
-    if (!confirm(msg)) return;
-    if (replaceAnimeList(merged)) {
+    const preview = mergeImport(state.animeList, parsed.records, 'keep-local');
+    const overlay = document.createElement('div');
+    overlay.className = 'data-dialog-overlay';
+    overlay.innerHTML = `
+        <section class="data-dialog" role="dialog" aria-modal="true" aria-labelledby="importModeTitle">
+            <h2 id="importModeTitle">选择导入方式</h2>
+            <p>导入 ${parsed.records.length} 部，其中 ${preview.matchedCount} 条已存在，${preview.addedCount} 条为新增。${parsed.errors.length ? `忽略无效记录 ${parsed.errors.length} 条。` : ''}</p>
+            <label class="import-mode-option"><input type="radio" name="importMode" value="only-new"><span><strong>仅添加新番</strong><small>已有番剧完全保留，只添加不存在的番剧。</small></span></label>
+            <label class="import-mode-option"><input type="radio" name="importMode" value="keep-local" checked><span><strong>保留本地</strong><small>保留本地进度、评分和感想，仅补充空缺资料并添加新番。</small></span></label>
+            <label class="import-mode-option"><input type="radio" name="importMode" value="use-import"><span><strong>使用导入记录</strong><small>已有番剧的进度、评分和感想使用导入内容。</small></span></label>
+            <p class="settings-hint">导入前自动保存一份备份，最近保留 3 份。</p>
+            <div class="data-dialog-preview">${parsed.records.slice(0, 8).map(record => `<span>${escHtml(record.title)} · ${record.currentEpisode}/${record.totalEpisodes} 集</span>`).join('')}${parsed.records.length > 8 ? `<span>另有 ${parsed.records.length - 8} 部</span>` : ''}</div>
+            <div class="sync-actions"><button class="btn btn-secondary" data-import-cancel>取消</button><button class="btn btn-primary" data-import-apply>确认导入</button></div>
+        </section>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('[data-import-cancel]').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+    overlay.querySelector('[data-import-apply]').addEventListener('click', () => {
+        const mode = overlay.querySelector('input[name="importMode"]:checked')?.value || 'keep-local';
+        const { merged, appliedRecords } = mergeImport(state.animeList, parsed.records, mode);
+        if (!appliedRecords.length) { overlay.remove(); showToast('没有需要添加的番剧'); return; }
+        if (!replaceAnimeList(merged, { backupReason: '导入 JSON 前' })) return;
+        overlay.remove();
         setTimeout(() => showToast('导入成功，正在补全缺失信息...'), 100);
-        completeImportedMetadata(parsed.records).catch(error => {
+        completeImportedMetadata(appliedRecords).catch(error => {
             console.error('[Import] 补全任务失败', error);
             showToast('导入已保存，部分信息暂时无法补全');
         });
-    }
+    });
 }
 
 /**

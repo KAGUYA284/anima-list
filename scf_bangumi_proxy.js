@@ -78,7 +78,7 @@ function proxyImage(url, origin) {
             port: 443,
             path: `${url.pathname}${url.search}`,
             method: 'GET',
-            headers: { 'User-Agent': 'AnimaList/1.3.0' },
+            headers: { 'User-Agent': 'AnimaList/1.3.1' },
         }, upstream => {
             const contentType = String(upstream.headers['content-type'] || '').split(';')[0];
             if (upstream.statusCode !== 200 || !/^image\/(?:jpeg|png|webp|gif)$/.test(contentType)) {
@@ -400,7 +400,7 @@ function downloadYucPage(path, transport = https) {
             path,
             method: 'GET',
             headers: {
-                'User-Agent': 'AnimaList/1.3.0 (+local anime tracker)',
+                'User-Agent': 'AnimaList/1.3.1 (+local anime tracker)',
                 Accept: 'text/html,application/xhtml+xml',
                 'Accept-Encoding': 'identity',
             },
@@ -505,7 +505,7 @@ function requestBangumi({ path, method = 'GET', body = '' }) {
             path,
             method,
             headers: {
-                'User-Agent': 'AnimaList/1.3.0',
+                'User-Agent': 'AnimaList/1.3.1',
                 Accept: 'application/json',
                 ...(method === 'POST' ? {
                     'Content-Type': 'application/json',

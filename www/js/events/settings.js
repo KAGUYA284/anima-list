@@ -2,18 +2,20 @@
 // 事件处理 · 设置页 - Anime Tracker
 // ============================================================
 
-import { clearAnimeList, replaceAnimeList, setState, state, updateSettings } from '../store.js';
+import { clearAnimeList, replaceAnimeList, restoreLocalBackup, setState, state, updateSettings } from '../store.js';
 import { SYNC_PASSWORD_MAX_LENGTH, SYNC_PASSWORD_MIN_LENGTH } from '../constants.js';
 import { showToast } from '../utils.js';
 import { buildExportFilter } from './io.js';
 import { shouldRenderSyncConflictPanel } from '../sync-core.js';
 import { applyRefreshedMetadata, refreshAnimeMetadataList } from '../metadata-refresh.js';
+import { openUserGuide } from '../user-guide.js';
 import {
-    getSyncStatus, login, logout, register, resolveConflict, syncNow,
+    getSyncStatus, initializeCloud, login, logout, register, resolveConflict, restoreFromCloud, syncNow,
 } from '../sync-service.js';
 
 /** 绑定设置页事件 */
 export function attachSettingsEvents() {
+    document.getElementById('openUserGuideBtn')?.addEventListener('click', () => openUserGuide());
     if (window.__animaSyncSettingsHandler) window.removeEventListener('sync-state-changed', window.__animaSyncSettingsHandler);
     window.__animaSyncSettingsHandler = event => {
         if (state.currentPage !== 'settings') return;
@@ -27,6 +29,13 @@ export function attachSettingsEvents() {
             status.textContent = event.detail?.message || '';
             status.className = `sync-status sync-status-${phase}`;
         }
+        const busy = phase === 'syncing';
+        const syncButton = document.getElementById('syncNowBtn');
+        if (syncButton) syncButton.disabled = busy || !state.animeList.length || event.detail?.protection === 'remote';
+        const initializeButton = document.getElementById('syncInitializeBtn');
+        if (initializeButton) initializeButton.disabled = busy || !state.animeList.length;
+        const restoreButton = document.getElementById('syncRestoreBtn');
+        if (restoreButton) restoreButton.disabled = busy;
     };
     window.addEventListener('sync-state-changed', window.__animaSyncSettingsHandler);
 
@@ -71,6 +80,12 @@ export function attachSettingsEvents() {
             if (listOrder !== state.settings.listOrder) updateSettings({ listOrder });
         });
     });
+    document.querySelectorAll('.toggle-btn[data-update-order-start]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const updateOrderStart = btn.dataset.updateOrderStart === 'today' ? 'today' : 'yesterday';
+            if (updateOrderStart !== state.settings.updateOrderStart) updateSettings({ updateOrderStart });
+        });
+    });
     document.getElementById('listOrderInfoBtn')?.addEventListener('click', event => {
         const help = document.getElementById('listOrderHelp');
         if (!help) return;
@@ -82,6 +97,20 @@ export function attachSettingsEvents() {
         btn.addEventListener('click', () => {
             const showAnimeDetails = btn.dataset.animeDetails === 'true';
             if (showAnimeDetails !== state.settings.showAnimeDetails) updateSettings({ showAnimeDetails });
+        });
+    });
+
+    document.querySelectorAll('[data-startup-setting]').forEach(button => {
+        button.addEventListener('click', () => {
+            const key = button.dataset.startupSetting;
+            if (key === 'startupToday' || key === 'startupYesterday') updateSettings({ [key]: button.dataset.enabled === 'true' });
+        });
+    });
+    document.querySelectorAll('[data-restore-backup]').forEach(button => {
+        button.addEventListener('click', () => {
+            if (!confirm('恢复这份自动备份将替换当前番剧列表，并保留一份恢复前备份，确定继续吗？')) return;
+            if (restoreLocalBackup(button.dataset.restoreBackup)) showToast('已恢复自动备份');
+            else showToast('备份恢复失败，当前数据已保留');
         });
     });
 
@@ -139,7 +168,7 @@ export function attachSettingsEvents() {
 
     document.getElementById('clearAnimeListBtn')?.addEventListener('click', () => {
         if (!state.animeList.length) return;
-        if (!confirm(`确定要清空全部 ${state.animeList.length} 部番剧吗？此操作不可撤销。`)) return;
+        if (!confirm(`确定要清空全部 ${state.animeList.length} 部番剧吗？清空前会自动备份，可在数据管理中恢复。`)) return;
         if (clearAnimeList()) showToast('已清空所有番剧');
     });
 
@@ -179,6 +208,23 @@ export function attachSettingsEvents() {
             showToast(result?.action === 'blocked-empty-remote' ? '云端数据为空，不可同步' : '同步完成');
         }
         catch (error) { if (error.name !== 'SyncConflictError') showToast(error.message); }
+        finally { if (document.contains(button)) button.disabled = false; }
+    });
+    document.getElementById('syncInitializeBtn')?.addEventListener('click', async event => {
+        if (!confirm(`将当前 ${state.animeList.length} 部番剧上传到空白云端，确定初始化吗？云端已有记录时会停止。`)) return;
+        const button = event.currentTarget;
+        button.disabled = true;
+        try { await initializeCloud(); showToast('云端初始化完成'); setState({}); }
+        catch (error) { showToast(error.message); }
+        finally { if (document.contains(button)) button.disabled = false; }
+    });
+    document.getElementById('syncRestoreBtn')?.addEventListener('click', async event => {
+        const message = state.animeList.length ? '从云端恢复会替换本地列表，当前记录将先自动备份，确定继续吗？' : '确定从云端恢复番剧列表到当前设备吗？';
+        if (!confirm(message)) return;
+        const button = event.currentTarget;
+        button.disabled = true;
+        try { await restoreFromCloud(); showToast('已从云端恢复'); setState({}); }
+        catch (error) { showToast(error.message); }
         finally { if (document.contains(button)) button.disabled = false; }
     });
     document.getElementById('syncUseRemoteBtn')?.addEventListener('click', async () => {

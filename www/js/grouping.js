@@ -93,19 +93,53 @@ export function buildFilteredData(map, animeList) {
 }
 
 /**
- * 以番剧标准化名称 / Bangumi 条目为合并键，导入数据覆盖本地同键记录。
+ * 合并导入记录。only-new 不改已有条目，keep-local 仅补空资料，use-import 覆盖同条目。
  * @returns {{ merged: object[], localCount: number, importedCount: number }}
  */
-export function mergeImport(localList, importedRecords) {
-    const merged = new Map();
-    const mergeKey = item => item.bgmId
-        ? `bgm:${item.bgmId}`
-        : `title:${item.title.trim().toLocaleLowerCase('zh-CN')}`;
-    localList.forEach(item => merged.set(mergeKey(item), item));
-    importedRecords.forEach(item => merged.set(mergeKey(item), item));
+export function mergeImport(localList, importedRecords, mode = 'use-import') {
+    const merged = [...localList];
+    const appliedRecords = [];
+    let addedCount = 0;
+    let matchedCount = 0;
+    const titleKey = value => String(value || '').normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
+    for (const imported of importedRecords) {
+        let index = merged.findIndex(item => item.id && item.id === imported.id);
+        if (index < 0 && imported.bgmId) index = merged.findIndex(item => String(item.bgmId || '') === String(imported.bgmId));
+        if (index < 0) index = merged.findIndex(item => (
+            (!item.bgmId || !imported.bgmId || String(item.bgmId) === String(imported.bgmId))
+            && titleKey(item.title) === titleKey(imported.title)
+        ));
+        if (index < 0) {
+            merged.push(imported);
+            appliedRecords.push(imported);
+            addedCount += 1;
+            continue;
+        }
+        matchedCount += 1;
+        if (mode === 'only-new') continue;
+        const local = merged[index];
+        let next;
+        if (mode === 'keep-local') {
+            next = { ...local };
+            for (const field of ['bgmId', 'titleJp', 'yucKey', 'airDate', 'updateWeekDay', 'updateTime', 'updatePeriod']) {
+                if (!next[field] && imported[field]) next[field] = imported[field];
+            }
+            const localMeta = local.metadata || {};
+            const remoteMeta = imported.metadata || {};
+            next.metadata = { ...remoteMeta, ...localMeta, staff: { ...remoteMeta.staff, ...localMeta.staff } };
+            for (const field of ['summary', 'coverUrl', 'thumbnailUrl', 'updatedAt', 'bangumiUpdatedAt', 'yucUpdatedAt']) {
+                if (!localMeta[field] && remoteMeta[field]) next.metadata[field] = remoteMeta[field];
+            }
+        } else next = { ...imported, ...(local.id ? { id: local.id } : {}) };
+        merged[index] = next;
+        appliedRecords.push(next);
+    }
     return {
-        merged: Array.from(merged.values()),
+        merged,
         localCount: localList.length,
         importedCount: importedRecords.length,
+        addedCount,
+        matchedCount,
+        appliedRecords,
     };
 }

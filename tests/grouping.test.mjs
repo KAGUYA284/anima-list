@@ -141,3 +141,19 @@ test('mergeImport 以 bgmId 优先、标题兜底作为合并键', () => {
     assert.equal(merged.find(x => x.title === '  仅标题  ') !== undefined, true);
     assert.equal(merged.some(x => x.bgmId === 2), true);
 });
+
+test('import modes preserve personal records and distinguish adding from filling missing fields', () => {
+    const local = [{ id: 'local', bgmId: '42', title: '本地标题', currentEpisode: 8, rating: 5, episodeNotes: { 8: { note: '本地笔记', watchedAt: '2026-10-23T10:00:00.000Z' } }, airDate: '' }];
+    const imported = [{ id: 'old', bgmId: '42', title: '旧标题', currentEpisode: 2, rating: 1, episodeNotes: {}, airDate: '2026-10-01' }, { id: 'new', title: '新番', currentEpisode: 0 }];
+    const onlyNew = mergeImport(local, imported, 'only-new');
+    assert.equal(onlyNew.merged[0], local[0]);
+    assert.equal(onlyNew.appliedRecords.length, 1);
+    const keep = mergeImport(local, imported, 'keep-local').merged[0];
+    assert.equal(keep.currentEpisode, 8);
+    assert.equal(keep.rating, 5);
+    assert.equal(keep.episodeNotes[8].note, '本地笔记');
+    assert.equal(keep.airDate, '2026-10-01');
+    const overwrite = mergeImport(local, imported, 'use-import').merged[0];
+    assert.equal(overwrite.currentEpisode, 2);
+    assert.equal(overwrite.id, 'local');
+});

@@ -22,6 +22,7 @@ const CACHE_STORAGE_KEY = 'anime-tracker-api-cache-v2';
 const MAX_PERSISTED_CACHE_ENTRIES = 100;
 const STALE_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
 const proxyImageCache = new Map();
+const yucFetchedAt = new WeakMap();
 
 function readPersistedCache() {
     try {
@@ -76,6 +77,43 @@ function imageContentType(headers) {
     return matches?.at(-1)?.toLowerCase() || 'image/jpeg';
 }
 
+async function imageResponseBlob(response) {
+    if (!response.ok) throw new Error(`Image request returned ${response.status}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let blobBytes = bytes;
+    const encoding = String(response.headers.get('X-Encoding') || '').toLowerCase();
+    const looksBinary = (bytes[0] === 0xff && bytes[1] === 0xd8)
+        || (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
+        || (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46)
+        || (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46);
+    if (!looksBinary && encoding !== 'binary') {
+        const base64 = new TextDecoder('ascii').decode(bytes).trim();
+        if (!base64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+            throw new Error('Image proxy returned an unsupported payload');
+        }
+        blobBytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
+    }
+    return new Blob([blobBytes], { type: imageContentType(response.headers) });
+}
+
+/** Fetch image bytes for the local thumbnail store, with the same direct/proxy preference as the API. */
+export async function fetchBangumiImageBlob(value, endpoint = state.settings.apiEndpoint) {
+    const directUrl = safeImageUrl(value);
+    if (!directUrl) throw new Error('封面地址无效');
+    const proxyUrl = getBangumiImageUrl(directUrl, 'proxy1');
+    const urls = [...new Set(endpoint === 'proxy1' ? [proxyUrl, directUrl] : [directUrl, proxyUrl])];
+    let lastError;
+    for (const url of urls) {
+        try {
+            const response = await fetchWithTimeout(url, { cache: 'force-cache', credentials: 'omit' });
+            return await imageResponseBlob(response);
+        } catch (error) {
+            lastError = error;
+        }
+    }
+    throw lastError || new Error('封面下载失败');
+}
+
 /** Convert both native binary and SCF gateway Base64 responses into a browser image URL. */
 export async function resolveBangumiImageUrl(value, endpoint = state.settings.apiEndpoint) {
     const directUrl = safeImageUrl(value);
@@ -85,27 +123,7 @@ export async function resolveBangumiImageUrl(value, endpoint = state.settings.ap
 
     const pending = (async () => {
         const response = await fetchWithTimeout(proxyUrl, { cache: 'force-cache' });
-        if (!response.ok) throw new Error(`Image proxy returned ${response.status}`);
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        let blobBytes = bytes;
-        // 快路径：代理显式声明编码时按其处理，无需魔术字节猜测。
-        const encoding = String(response.headers.get('X-Encoding') || '').toLowerCase();
-        const looksBinary = (bytes[0] === 0xff && bytes[1] === 0xd8)
-            || (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
-            || (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46)
-            || (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46);
-        // 头缺失或声明 base64 时回退到启发式判断（保持向后兼容，且不会
-        // 覆盖对真实二进制的可靠识别——避免网关已解码时被误当作 base64）。
-        const isKnownBinary = looksBinary || encoding === 'binary';
-        if (!isKnownBinary) {
-            const base64 = new TextDecoder('ascii').decode(bytes).trim();
-            if (!base64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
-                throw new Error('Image proxy returned an unsupported payload');
-            }
-            const decoded = atob(base64);
-            blobBytes = Uint8Array.from(decoded, char => char.charCodeAt(0));
-        }
-        return URL.createObjectURL(new Blob([blobBytes], { type: imageContentType(response.headers) }));
+        return URL.createObjectURL(await imageResponseBlob(response));
     })().catch(error => {
         proxyImageCache.delete(proxyUrl);
         throw error;
@@ -118,13 +136,14 @@ export async function resolveBangumiImageUrl(value, endpoint = state.settings.ap
 export function hydrateBangumiImages(root = document) {
     if (state.settings.apiEndpoint !== 'proxy1') return;
     root.querySelectorAll('img[data-direct-src]').forEach(image => {
-        if (image.dataset.proxyLoading === 'true') return;
+        if (image.dataset.proxyLoading === 'true' || image.dataset.localThumbnail === 'true'
+            || image.dataset.libraryPending === 'true') return;
         const directUrl = safeImageUrl(image.dataset.directSrc);
         if (!directUrl || getBangumiImageUrl(directUrl) === directUrl) return;
         image.dataset.proxyLoading = 'true';
         resolveBangumiImageUrl(directUrl)
             .then(url => {
-                if (image.isConnected) image.src = url;
+                if (image.isConnected && image.dataset.localThumbnail !== 'true') image.src = url;
             })
             .catch(error => console.warn('[Image proxy] Unable to decode image', error))
             .finally(() => { delete image.dataset.proxyLoading; });
@@ -237,6 +256,7 @@ async function cachedRequest(key, loader, ttlMs, { forceRefresh = false } = {}) 
         .then(value => {
             const entry = {
                 value,
+                fetchedAt: Date.now(),
                 expiresAt: Date.now() + ttlMs,
                 staleUntil: Date.now() + STALE_CACHE_MS,
             };
@@ -348,6 +368,16 @@ export function getCachedBangumiSubject(id) {
     return getCacheEntry(key)?.value || null;
 }
 
+export function getBangumiSubjectFetchedAt(id) {
+    const cached = getCacheEntry(`${getApiBaseUrl()}:subject:${id}`);
+    const timestamp = cached?.fetchedAt || (cached?.expiresAt - 6 * 60 * 60 * 1000);
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : '';
+}
+
+export function getYucAnimeFetchedAt(record) {
+    return record && typeof record === 'object' ? yucFetchedAt.get(record) || '' : '';
+}
+
 export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airDate = '', forceRefresh = false } = {}) {
     const query = new URLSearchParams();
     if (title) query.set('title', String(title).slice(0, 300));
@@ -362,14 +392,16 @@ export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airD
         const direct = await getYucAnimeDirect({ title, titleCn, titleJp, airDate, forceRefresh });
         if (direct) {
             const season = yucSeasonFromDate(airDate);
-            return { source: 'yuc.wiki', season, sourceUrl: `https://yuc.wiki/${season}/`, ...direct };
+            const result = { source: 'yuc.wiki', season, sourceUrl: `https://yuc.wiki/${season}/`, ...direct };
+            yucFetchedAt.set(result, new Date().toISOString());
+            return result;
         }
     } catch (error) {
         console.info('[Yuc] 端侧抓取失败，回退云函数', error.message);
     }
 
     const key = `${API_PROXIES.proxy1}:yuc:${query}`;
-    return cachedRequest(key, async () => {
+    const result = await cachedRequest(key, async () => {
         const data = await apiFetch(`${API_PROXIES.proxy1}/yuc/anime?${query}`, {}, {
             retries: 1,
             timeoutMs: 15000,
@@ -381,6 +413,12 @@ export async function getYucAnime({ title = '', titleCn = '', titleJp = '', airD
         }
         return data;
     }, 6 * 60 * 60 * 1000, { forceRefresh });
+    if (result && typeof result === 'object') {
+        const cached = getCacheEntry(key);
+        const timestamp = cached?.fetchedAt || (cached?.expiresAt - 6 * 60 * 60 * 1000);
+        if (Number.isFinite(timestamp)) yucFetchedAt.set(result, new Date(timestamp).toISOString());
+    }
+    return result;
 }
 
 export function getYucSeasonList(season) {

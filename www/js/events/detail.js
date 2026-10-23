@@ -4,9 +4,12 @@
 
 import { changeProgress } from '../core.js';
 import { getBangumiCharacters, getBangumiImageUrl, getBangumiSubject, getYucAnime, hydrateBangumiImages } from '../api.js';
-import { deleteAnime, getAnimeById, getCurrentAnime, setState, state, updateAnime } from '../store.js';
+import { deleteAnime, getCurrentAnime, setState, state, updateAnime, updateSettings } from '../store.js';
 import { escHtml, safeImageUrl } from '../utils.js';
 import { hasYucSeasonData } from '../yuc.js';
+import { attachEpisodeNotes } from '../episode-notes.js';
+import { getLibraryMetadata, persistLibraryMetadata, resolveLibraryThumbnail } from '../library-cache.js';
+import { renderStaffInformation } from '../renderer/detail.js';
 
 /** 绑定详情页事件 */
 export function attachDetailEvents() {
@@ -22,7 +25,7 @@ export function attachDetailEvents() {
     });
 
     document.getElementById('deleteAnime').addEventListener('click', () => {
-        if (confirm(`确定要删除《${anime.title}》吗？此操作不可撤销。`)) {
+        if (confirm(`确定要删除《${anime.title}》吗？删除后可以短时间撤销。`)) {
             deleteAnime(anime.id);
         }
     });
@@ -59,28 +62,49 @@ export function attachDetailEvents() {
     });
 
     // ======== Bangumi 详情加载 ========
+    if (state.settings.showAnimeDetails) {
+        applySavedThumbnail(anime, document.getElementById('bangumiDetail'));
+    }
     if (state.settings.showAnimeDetails && anime.bgmId) {
-        loadBangumiDetailInto(anime.bgmId).catch(e => {
+        loadBangumiDetailInto(anime).catch(e => {
             console.error('[Detail] Bangumi 详情加载失败:', e);
+            if (getCurrentAnime()?.id !== anime.id) return;
             const container = document.getElementById('bangumiDetail');
-            if (container) container.innerHTML = '';
+            container?.querySelector('.bgm-loading')?.remove();
         });
     }
     if (state.settings.showAnimeDetails) {
         loadYucDetailInto(anime).catch(error => {
             console.warn('[Detail] 长门有希详情加载失败:', error);
+            if (getCurrentAnime()?.id !== anime.id) return;
             const container = document.getElementById('yucDetail');
-            if (container) container.innerHTML = '';
+            container?.querySelector('.bgm-loading')?.remove();
         });
     }
 
-    // ======== 单集记录编辑 ========
-    document.querySelectorAll('.episode-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const ep = parseInt(item.dataset.ep);
-            showEpisodeEditor(anime, ep);
-        });
+    const episodeSection = document.getElementById('episodeNotesSection');
+    episodeSection?.addEventListener('toggle', () => {
+        if (state.settings.episodeNotesCollapsed !== !episodeSection.open) {
+            updateSettings({ episodeNotesCollapsed: !episodeSection.open }, { render: false });
+        }
     });
+    attachEpisodeNotes(document.getElementById('episodeNotes'), anime.id, {
+        jumpButton: document.getElementById('jumpToCurrentEpisode'),
+    });
+}
+
+async function applySavedThumbnail(anime, container) {
+    if (!container) return;
+    try {
+        const url = await resolveLibraryThumbnail(anime, { fetchMissing: false });
+        const image = container.querySelector('.bgm-cover img');
+        if (!url || !image || !container.isConnected || getCurrentAnime()?.id !== anime.id) return;
+        image.dataset.localThumbnail = 'true';
+        image.src = url;
+        image.style.display = '';
+    } catch (error) {
+        console.warn('[Detail] 本地缩略图读取失败:', error);
+    }
 }
 
 async function loadYucDetailInto(anime) {
@@ -90,7 +114,7 @@ async function loadYucDetailInto(anime) {
         container.innerHTML = '';
         return;
     }
-    container.innerHTML = '<div class="bgm-loading">正在匹配制作信息...</div>';
+    if (!container.innerHTML.trim()) container.innerHTML = '<div class="bgm-loading">正在匹配制作信息...</div>';
 
     let subject = null;
     if (anime.bgmId) {
@@ -106,51 +130,34 @@ async function loadYucDetailInto(anime) {
         titleJp: subject?.name || '',
         airDate: anime.airDate,
     });
-    const staff = yuc?.staff || {};
-    const fields = [
-        ['原作', staff.originalWork],
-        ['导演', staff.director],
-        ['副导演', staff.assistantDirector],
-        ['编剧', staff.seriesComposition],
-        ['人物设计', staff.characterDesign],
-        ['动画人设', staff.animationCharacterDesign],
-        ['动画制作', staff.animationStudio],
-    ].filter(([, value]) => value);
-    if (fields.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-
-    container.innerHTML = `
-        <div class="yuc-detail-header">
-            <h2 class="detail-section-title">制作信息</h2>
-        </div>
-        <div class="yuc-staff-grid">
-            ${fields.map(([label, value]) => `
-                <div class="yuc-staff-row">
-                    <span class="info-label">${label}</span>
-                    <span>${escHtml(value)}</span>
-                </div>
-            `).join('')}
-        </div>
-    `;
+    if (yuc) await persistLibraryMetadata(anime.id, { yuc });
+    if (!container.isConnected || getCurrentAnime()?.id !== anime.id) return;
+    const saved = getLibraryMetadata(getCurrentAnime());
+    const html = renderStaffInformation(saved.staff);
+    if (html) container.innerHTML = html;
+    else container.querySelector('.bgm-loading')?.remove();
 }
 
 /** 加载 Bangumi 详情（异步渲染到 #bangumiDetail） */
-async function loadBangumiDetailInto(bgmId) {
+async function loadBangumiDetailInto(anime) {
     const container = document.getElementById('bangumiDetail');
     if (!container) return;
-    container.innerHTML = '<div class="bgm-loading">加载番剧详情...</div>';
+    if (!container.innerHTML.trim()) container.innerHTML = '<div class="bgm-loading">加载番剧详情...</div>';
 
-    const [subject, characters] = await Promise.all([
-        getBangumiSubject(bgmId),
-        getBangumiCharacters(bgmId),
+    const [subjectResult, charactersResult] = await Promise.allSettled([
+        getBangumiSubject(anime.bgmId),
+        getBangumiCharacters(anime.bgmId),
     ]);
+    if (subjectResult.status === 'rejected') throw subjectResult.reason;
+    const subject = subjectResult.value;
+    const characters = charactersResult.status === 'fulfilled' ? charactersResult.value : [];
 
     if (!subject) {
-        container.innerHTML = '';
+        container.querySelector('.bgm-loading')?.remove();
         return;
     }
+    await persistLibraryMetadata(anime.id, { subject });
+    if (!container.isConnected || getCurrentAnime()?.id !== anime.id) return;
 
     // 修复旧代理曾写入本地记录的 U+FFFD 替换字符标题。
     const currentAnime = getCurrentAnime();
@@ -161,10 +168,11 @@ async function loadBangumiDetailInto(bgmId) {
         if (titleElement) titleElement.textContent = remoteTitle;
     }
 
-    const rawCover = subject.images?.large || '';
+    const metadata = getLibraryMetadata(getCurrentAnime());
+    const rawCover = subject.images?.large || metadata.coverUrl || metadata.thumbnailUrl || '';
     const cover = getBangumiImageUrl(rawCover);
     const coverFallback = safeImageUrl(rawCover);
-    const summary = subject.summary || '';
+    const summary = subject.summary || metadata.summary || '';
 
     // 角色头像 HTML（带加载失败回退）
     function avatarHtml(c) {
@@ -208,77 +216,5 @@ async function loadBangumiDetailInto(bgmId) {
         ` : ''}
     `;
     hydrateBangumiImages(container);
-}
-
-/** 显示单集编辑弹窗 */
-function showEpisodeEditor(anime, episodeNum) {
-    const notes = anime.episodeNotes || {};
-    const ep = notes[episodeNum] || {};
-
-    const overlay = document.createElement('div');
-    overlay.className = 'ep-editor-overlay';
-
-    let starHtml = '';
-    for (let i = 1; i <= 5; i++) {
-        starHtml += `<span class="rating-star ${i <= (ep.rating || 0) ? 'filled' : 'empty'}" data-sr="${i}">★</span>`;
-    }
-
-    overlay.innerHTML = `
-        <div class="ep-editor">
-            <div class="ep-editor-title">第 ${episodeNum} 集记录</div>
-            <textarea id="epNoteInput" placeholder="写下这一集的感想...">${escHtml(ep.note || '')}</textarea>
-            <div class="ep-editor-stars" id="epEditorStars">
-                ${starHtml}
-            </div>
-            <div class="ep-editor-actions">
-                <button class="btn btn-secondary" id="epEditorDelete">删除</button>
-                <button class="btn btn-primary" id="epEditorSave">保存</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    let rating = ep.rating || 0;
-
-    // 点击星星
-    overlay.querySelectorAll('#epEditorStars .rating-star').forEach(star => {
-        star.addEventListener('click', () => {
-            rating = parseInt(star.dataset.sr);
-            overlay.querySelectorAll('#epEditorStars .rating-star').forEach((s, idx) => {
-                s.className = 'rating-star' + (idx < rating ? ' filled' : ' empty');
-            });
-        });
-    });
-
-    // 保存
-    document.getElementById('epEditorSave').addEventListener('click', () => {
-        const noteText = document.getElementById('epNoteInput').value.trim();
-        const currentAnime = getAnimeById(anime.id);
-        if (!currentAnime) return;
-
-        const currentNotes = { ...(currentAnime.episodeNotes || {}) };
-        if (noteText || rating > 0) {
-            currentNotes[episodeNum] = { note: noteText, rating };
-        } else {
-            delete currentNotes[episodeNum];
-        }
-        updateAnime(anime.id, { episodeNotes: currentNotes });
-        overlay.remove();
-    });
-
-    // 删除
-    document.getElementById('epEditorDelete').addEventListener('click', () => {
-        const currentAnime = getAnimeById(anime.id);
-        if (!currentAnime) return;
-        const currentNotes = { ...(currentAnime.episodeNotes || {}) };
-        delete currentNotes[episodeNum];
-        updateAnime(anime.id, { episodeNotes: currentNotes });
-        overlay.remove();
-    });
-
-    // 点击遮罩关闭
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) overlay.remove();
-    });
+    applySavedThumbnail(getCurrentAnime(), container);
 }

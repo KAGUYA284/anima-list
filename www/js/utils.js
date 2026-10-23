@@ -47,12 +47,21 @@ export function renderEditableStars(rating) {
 }
 
 /** 显示 Toast 提示消息 */
-export function showToast(msg) {
+export function showToast(msg, { duration = 2000, actionLabel = '', onAction } = {}) {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = msg;
+    el.setAttribute('role', 'status');
+    if (actionLabel && onAction) {
+        const button = document.createElement('button');
+        button.className = 'toast-action';
+        button.type = 'button';
+        button.textContent = actionLabel;
+        button.addEventListener('click', () => { onAction(); el.remove(); });
+        el.appendChild(button);
+    }
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2000);
+    setTimeout(() => el.remove(), duration);
 }
 
 /** 只允许远程图片使用 HTTPS，阻止 javascript:、data: 等危险协议。 */

@@ -1,10 +1,12 @@
 import {
-    getBangumiSubject, getYucAnime, searchBangumi, selectBangumiMatch,
+    getBangumiSubject, getBangumiSubjectFetchedAt, getYucAnime, getYucAnimeFetchedAt,
+    searchBangumi, selectBangumiMatch,
 } from './api.js';
 import { normalizeAnimeRecord } from './data.js';
+import { getLibraryMetadata, mergeLibraryMetadata } from './library-cache.js';
 
 const REMOTE_FIELDS = [
-    'title', 'totalEpisodes', 'airDate', 'updateWeekDay', 'updateTime', 'updatePeriod', 'bgmId',
+    'title', 'titleJp', 'totalEpisodes', 'airDate', 'updateWeekDay', 'updateTime', 'updatePeriod', 'bgmId',
 ];
 
 export function mergeRemoteAnimeMetadata(record, { subject = null, yuc = null } = {}) {
@@ -17,6 +19,7 @@ export function mergeRemoteAnimeMetadata(record, { subject = null, yuc = null } 
     const candidate = normalizeAnimeRecord({
         ...record,
         title: subject?.name_cn || subject?.name || record.title,
+        titleJp: subject?.name || record.titleJp || '',
         bgmId: subject?.id ? String(subject.id) : record.bgmId,
         totalEpisodes,
         airDate: schedule.airDate || subject?.date || record.airDate,
@@ -29,8 +32,14 @@ export function mergeRemoteAnimeMetadata(record, { subject = null, yuc = null } 
         updatePeriod: record.type === 'chasing'
             ? schedule.updatePeriod || record.updatePeriod
             : record.updatePeriod,
+        metadata: mergeLibraryMetadata(record, {
+            subject, yuc,
+            bangumiUpdatedAt: getBangumiSubjectFetchedAt(subject?.id),
+            yucUpdatedAt: getYucAnimeFetchedAt(yuc),
+        }),
     });
-    const changed = REMOTE_FIELDS.some(field => candidate[field] !== record[field]);
+    const changed = REMOTE_FIELDS.some(field => candidate[field] !== record[field])
+        || JSON.stringify(candidate.metadata) !== JSON.stringify(getLibraryMetadata(record));
     return changed
         ? normalizeAnimeRecord({ ...candidate, updatedAt: new Date().toISOString() })
         : record;
@@ -39,9 +48,24 @@ export function mergeRemoteAnimeMetadata(record, { subject = null, yuc = null } 
 export function applyRefreshedMetadata(current, refreshed) {
     if (!refreshed) return current;
     const updates = Object.fromEntries(REMOTE_FIELDS.map(field => [field, refreshed[field]]));
+    const currentMetadata = getLibraryMetadata(current);
+    const refreshedMetadata = getLibraryMetadata(refreshed);
+    const metadata = { ...currentMetadata, staff: { ...currentMetadata.staff } };
+    if (refreshedMetadata.bangumiUpdatedAt && refreshedMetadata.bangumiUpdatedAt >= (currentMetadata.bangumiUpdatedAt || '')) {
+        for (const field of ['summary', 'coverUrl', 'thumbnailUrl', 'bangumiUpdatedAt']) {
+            if (refreshedMetadata[field]) metadata[field] = refreshedMetadata[field];
+        }
+    }
+    if (refreshedMetadata.yucUpdatedAt && refreshedMetadata.yucUpdatedAt >= (currentMetadata.yucUpdatedAt || '')) {
+        metadata.staff = { ...metadata.staff, ...refreshedMetadata.staff };
+        metadata.yucUpdatedAt = refreshedMetadata.yucUpdatedAt;
+    }
+    if (refreshedMetadata.updatedAt && refreshedMetadata.updatedAt >= (currentMetadata.updatedAt || '')) metadata.updatedAt = refreshedMetadata.updatedAt;
+    updates.metadata = metadata;
     const highestNotedEpisode = Math.max(0, ...Object.keys(current.episodeNotes || {}).map(Number).filter(Number.isFinite));
     updates.totalEpisodes = Math.max(Number(updates.totalEpisodes) || 1, Number(current.currentEpisode) || 0, highestNotedEpisode);
-    const changed = REMOTE_FIELDS.some(field => updates[field] !== current[field]);
+    const changed = REMOTE_FIELDS.some(field => updates[field] !== current[field])
+        || JSON.stringify(metadata) !== JSON.stringify(currentMetadata);
     return changed
         ? normalizeAnimeRecord({ ...current, ...updates, updatedAt: refreshed.updatedAt })
         : current;

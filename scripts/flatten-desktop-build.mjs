@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const workspace = resolve('.');
@@ -51,5 +51,6 @@ function removeRuntimeCaches(directory) {
 removeRuntimeCaches(unpacked);
 rmSync(portable, { recursive: true, force: true });
 renameSync(unpacked, portable);
+writeFileSync(resolve(portable, '.anima-list-portable'), '');
 rmSync(buildRoot, { recursive: true, force: true });
 console.log(`Portable desktop preview: ${resolve(portable, 'Anima List.exe')}`);

@@ -2,6 +2,7 @@ import { state } from '../store.js';
 import { WEEK_DAYS } from '../constants.js';
 import { escHtml, safeImageUrl } from '../utils.js';
 import { yucSeasonFromDate, yucSeasonLabel } from '../yuc.js';
+import { findExistingSeasonalAnime } from '../seasonal-import.js';
 
 export function renderYucPage() {
     const season = state.yucSeason || yucSeasonFromDate();
@@ -40,7 +41,7 @@ export function renderYucPage() {
     `;
 }
 
-export function renderYucRecords(records, existingTitles = new Set()) {
+export function renderYucRecords(records, animeList = [], season = '') {
     const indexed = records
         .map((record, index) => ({ record, index }))
         .filter(({ record }) => record.titleCn || record.title || record.titleJp);
@@ -59,17 +60,16 @@ export function renderYucRecords(records, existingTitles = new Set()) {
                 <span>${section.records.length} 部</span>
             </div>
             <div class="yuc-weekday-grid">
-                ${section.records.map(({ record, index }) => renderYucRecord(record, index, existingTitles)).join('')}
+                ${section.records.map(({ record, index }) => renderYucRecord(record, index, animeList, season)).join('')}
             </div>
         </section>
     `).join('');
 }
 
-function renderYucRecord(record, index, existingTitles) {
+function renderYucRecord(record, index, animeList, season) {
         const schedule = record.schedule || {};
         const title = record.titleCn || record.title || record.titleJp;
-        const key = String(title).normalize('NFKC').replace(/[\p{P}\p{S}\s]/gu, '').toLocaleLowerCase('zh-CN');
-        const exists = existingTitles.has(key);
+        const exists = !!findExistingSeasonalAnime(animeList, record, null, season);
         const date = schedule.airDate || '日期待定';
         const time = schedule.updateTime || '';
         const period = schedule.updatePeriod || '';

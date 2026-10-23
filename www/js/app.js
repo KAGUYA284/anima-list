@@ -1,7 +1,10 @@
-import { render, showReminder } from './renderer.js';
-import { setRenderer, setState, state } from './store.js';
+import { loadListCovers, render, showReminder } from './renderer.js';
+import { DELETE_UNDO_MS, setRenderer, setState, state, undoDeletedAnime } from './store.js';
 import { showToast } from './utils.js';
 import { scheduleAutoSync } from './sync-service.js';
+import { queueLibraryCache } from './library-cache.js';
+import guideMarkdown from '../../docs/软件使用说明.md?raw';
+import { closeUserGuide, initializeUserGuide } from './user-guide.js';
 
 function safeRender() {
     try {
@@ -25,6 +28,17 @@ function safeRender() {
 setRenderer(safeRender);
 safeRender();
 window.__animeTrackerReady?.();
+initializeUserGuide(guideMarkdown);
+queueLibraryCache();
+window.addEventListener('anime-list-changed', () => queueLibraryCache());
+window.addEventListener('online', () => queueLibraryCache({ retryFailed: true }));
+const refreshLibraryImages = event => {
+    if (state.currentPage === 'list' && state.settings.listStyle === 'cover') {
+        void loadListCovers(event.detail?.id || '');
+    }
+};
+window.addEventListener('library-metadata-updated', refreshLibraryImages);
+window.addEventListener('library-cache-updated', refreshLibraryImages);
 
 setTimeout(() => {
     try {
@@ -37,6 +51,18 @@ setTimeout(() => scheduleAutoSync(), 900);
 
 window.addEventListener('storage-error', () => {
     showToast('数据保存失败，请立即导出备份');
+});
+
+window.addEventListener('backup-error', () => {
+    showToast('自动备份保存失败，已停止覆盖。请先导出数据并释放本地空间。', { duration: 5000 });
+});
+window.addEventListener('anime-deleted', event => {
+    const { token, title } = event.detail;
+    showToast(`已删除《${title}》`, {
+        duration: DELETE_UNDO_MS,
+        actionLabel: '撤销',
+        onAction: () => showToast(undoDeletedAnime(token) ? '已恢复番剧' : '撤销已过期或番剧已存在'),
+    });
 });
 
 let lastUnexpectedErrorAt = 0;
@@ -60,6 +86,7 @@ window.addEventListener('error', event => {
 const capacitorApp = window.Capacitor?.Plugins?.App;
 if (capacitorApp) {
     capacitorApp.addListener('backButton', () => {
+        if (closeUserGuide()) return;
         if (state.currentPage !== 'list') {
             setState({ currentPage: 'list', currentAnimeId: null });
             return;

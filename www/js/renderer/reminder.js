@@ -8,13 +8,16 @@ import { escHtml } from '../utils.js';
 import { hasYucSeasonData } from '../yuc.js';
 
 /** 渲染追番提醒弹窗 */
-export function showReminder() {
-    const now = new Date();
+export function showReminder(now = new Date()) {
     const todayWeekday = now.getDay() === 0 ? 7 : now.getDay();
 
-    const { today: chasingToday, binge: bingeUnfinished } = getReminderItems(state.animeList, todayWeekday, now);
+    if (state.settings.startupToday === false && !state.settings.startupYesterday) return;
+    const reminders = getReminderItems(state.animeList, todayWeekday, now);
+    const chasingToday = state.settings.startupToday !== false ? reminders.today : [];
+    const chasingYesterday = state.settings.startupYesterday ? reminders.yesterday : [];
+    const bingeUnfinished = reminders.binge;
 
-    if (chasingToday.length === 0 && bingeUnfinished.length === 0) return;
+    if (chasingToday.length === 0 && chasingYesterday.length === 0 && bingeUnfinished.length === 0) return;
 
     let html = '';
     if (chasingToday.length > 0) {
@@ -37,6 +40,15 @@ export function showReminder() {
             </div>`;
         });
         html += `</div>`;
+    }
+
+    if (chasingYesterday.length > 0) {
+        html += `<div class="reminder-section"><div class="reminder-section-title">📺 昨天更新的番剧（${chasingYesterday.length}部）</div>`;
+        chasingYesterday.forEach(anime => {
+            const showTime = hasYucSeasonData(anime.airDate);
+            html += `<div class="reminder-item"><span>${escHtml(anime.title)}</span><span class="reminder-weekday">${showTime && anime.updateTime ? `${escHtml(anime.updateTime)}${anime.updatePeriod ? `（${escHtml(anime.updatePeriod)}）` : ''} · ` : ''}${anime.currentEpisode}/${anime.totalEpisodes}集</span></div>`;
+        });
+        html += '</div>';
     }
 
     if (bingeUnfinished.length > 0) {

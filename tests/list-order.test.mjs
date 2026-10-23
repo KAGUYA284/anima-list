@@ -25,6 +25,33 @@ test('time order keeps the original Monday-to-Sunday ordering', () => {
         { title: '待定', updateWeekDay: 0 },
         { title: '周二', updateWeekDay: 2 },
     ];
-    records.sort((a, b) => compareChasingForDisplay(a, b, 'time', new Date('2026-08-05')));
+    records.sort((a, b) => compareChasingForDisplay(a, b, 'time', new Date('2026-08-05'), 'today'));
     assert.deepEqual(records.map(record => record.title), ['周一', '周二', '周三', '待定']);
+});
+
+test('update order uses the selected start day and wraps across week boundaries', () => {
+    for (const [start, expected] of [
+        ['today', [3, 2, 1, 7, 6, 5, 4, 0]],
+        ['yesterday', [2, 1, 7, 6, 5, 4, 3, 0]],
+    ]) {
+        const records = Array.from({ length: 8 }, (_, day) => ({ title: String(day), updateWeekDay: day }));
+        records.sort((a, b) => compareChasingForDisplay(a, b, 'update', new Date(2026, 7, 5, 12), start));
+        assert.deepEqual(records.map(record => record.updateWeekDay), expected);
+    }
+
+    const records = Array.from({ length: 7 }, (_, day) => ({ title: String(day), updateWeekDay: day + 1 }));
+    records.sort((a, b) => compareChasingForDisplay(a, b, 'update', new Date(2026, 7, 3, 12), 'yesterday'));
+    assert.deepEqual(records.map(record => record.updateWeekDay), [7, 6, 5, 4, 3, 2, 1]);
+});
+
+test('today update order retains later periods and times first, with unknown times last', () => {
+    const records = [
+        { title: '上午', updateWeekDay: 3, updateTime: '08:00' },
+        { title: '晚间早', updateWeekDay: 3, updateTime: '19:00' },
+        { title: '未定', updateWeekDay: 3 },
+        { title: '深夜', updateWeekDay: 3, updateTime: '24:30' },
+        { title: '晚间晚', updateWeekDay: 3, updateTime: '21:30' },
+    ];
+    records.sort((a, b) => compareChasingForDisplay(a, b, 'update', new Date(2026, 7, 5, 12), 'today'));
+    assert.deepEqual(records.map(record => record.title), ['深夜', '晚间晚', '晚间早', '上午', '未定']);
 });

@@ -49,13 +49,18 @@ function isInBroadcastWindow(anime, today) {
 export function getReminderItems(animeList, todayWeekday, now = new Date()) {
     const today = now instanceof Date ? new Date(now) : new Date(now);
     today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayWeekday = todayWeekday === 1 ? 7 : todayWeekday - 1;
+    const onDay = (weekday, date) => animeList.filter(a =>
+        (a.status === 'watching' || a.status === 'want')
+        && a.type === 'chasing'
+        && Number(a.updateWeekDay) === weekday
+        && isInBroadcastWindow(a, date)
+    );
     return {
-        today: animeList.filter(a =>
-            (a.status === 'watching' || a.status === 'want')
-            && a.type === 'chasing'
-            && a.updateWeekDay === todayWeekday
-            && isInBroadcastWindow(a, today)
-        ),
+        today: onDay(todayWeekday, today),
+        yesterday: onDay(yesterdayWeekday, yesterday),
         binge: animeList.filter(a => a.status === 'watching' && a.type === 'binge'),
     };
 }
