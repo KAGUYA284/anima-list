@@ -1,172 +1,200 @@
 # Anima List
 
-记录动漫观看进度的跨端应用。核心为一套 Vanilla JS + ES Module 前端（`www/`），
-通过 Vite 打包到 `dist/`，再由三种外壳分发：
+一个给动漫爱好者自用的追番与补番记录工具。把想看的作品、观看进度、单集感想和评分放在一起，在电脑和手机之间延续自己的观看记录。
 
-| 端 | 外壳 | 产物 |
-| --- | --- | --- |
-| Web | Vite 静态文件 + PowerShell 启动器 | `发布版本/v1.3.1/Web/`（构建后生成） |
-| Android / iOS | Capacitor | APK / IPA |
-| Windows 免安装版 | Electron | 正式无缓存包、缓存测试包 |
-| Windows 安装版 | Electron + NSIS | NSIS 安装程序 |
-| 番剧数据代理 | 腾讯云 SCF | Bangumi API/图片代理 + yuc.wiki 季度信息抓取 |
-| 云同步 API | Cloudflare Workers + Hono + D1 | 账号认证、JSON 快照、revision 冲突检测 |
+无需登录即可在本机使用；需要跨端同步时，再注册云同步账号。
 
-## 目录速览
+[下载 v1.3.1](https://github.com/KAGUYA284/anima-list/releases/tag/v1.3.1) · [完整使用说明](docs/软件使用说明.md) · [项目结构](#项目结构) · [更新记录](docs/工作内容说明.md)
 
-- `www/js/` — 前端源码，分层单向数据流：
-  - `app.js`（入口） → `store.js`（状态 + `setRenderer` 回调解耦）
-  - `renderer/`（渲染层，`renderer.js` 为兼容再导出入口）
-  - `events/`（事件层，`events.js` 为兼容再导出入口）
-  - `api.js` / `core.js` / `data.js` / `storage.js` / `grouping.js`（纯函数）/ `constants.js` / `utils.js`
-- `scripts/` — 构建脚本（版本同步、产物校验、源码检查、发布密钥）
-- `tests/` — 基于 `node:test` 的单元测试
-- `docs/` — 累计工作说明、升级计划和架构分析
-- `cloudflare/` — TypeScript 云同步服务、D1 迁移、Wrangler 示例配置和测试
-- `发布版本/v<版本号>/` — 面向用户和测试人员的最终产物（Git 忽略）
-- `scf_bangumi_proxy.js` — Bangumi API/图片代理及 yuc.wiki 季度页解析（CORS/路径白名单、体积限制、缓存）
+## 可以做什么
 
-## 番剧信息来源
+- **管理追番与补番**：按年份、季度整理作品，支持想看、在看、搁置、已看完和放弃，并根据观看状态自动调整季度归类。
+- **记录每一集**：主页点击 `+1` 更新进度；详情页按集保存感想、星级和观看时间，支持折叠与跳到当前集。
+- **浏览季度新番表**：按年份、季度及周一至周日浏览作品，直接加入待看，添加后留在原来的位置。
+- **安排更新次序**：按固定星期或最近更新排序，可选择当天、昨天为起点；启动时可显示当日和昨日更新。
+- **查看番剧资料**：自动补充封面、简介、制作人员、角色和声优；保存过的资料与缩略图可离线查看。
+- **备份与跨端同步**：JSON 导入导出、最近 3 份操作前备份、删除后 15 秒撤销，以及手机与电脑之间的云同步。
 
-更新时间与放送日期统一使用 yuc.wiki。在 Electron 中通过 Node.js 端侧读取，在 Web/移动端
-尝试直接读取 yuc.wiki，失败后才通过腾讯云 SCF 的 `/yuc/anime` 路由读取
-`yuc.wiki/YYYYMM/` 季度页，按封面和标准化
-中日文标题映射番剧，获取首播日期、每周更新时间（具体到小时）以及原作、导演、
-副导演、编剧、人物设计、动画人设、动画制作。详情页信息可通过“显示番剧具体信息”
-单独开关。
+![补看上季度作品，在主页记录 3/13 集进度](docs/images/readme-list.png)
 
-列表页设置按钮右侧的日历图标打开季度新番表。新番表通过年份和季度筛选器加载 2019 年
-10 月至未来任意年份的季度页面，并按周一至周日显示 yuc.wiki 图片。点击“加入待看”时
-先通过 Bangumi API 匹配 subject ID，搜索顺序为 yuc.wiki 日文标题优先、中文标题兜底，
-匹配后读取完整 Bangumi 条目，以 Bangumi ID 去重并导入规范标题、集数和首播日期，
-随后留在当前新番表页面；主列表封面与详情页角色、
-声优继续使用 Bangumi 数据。历史季度页面缺少具体首播日时，加入待看会优先使用 Bangumi
-首播日期，并以所选季度首日作为最终归类兜底。2019 年 10 月前统一显示“无数据”，也不展示 yuc.wiki
-具体时间段和制作信息。
+## 下载与启动
 
-列表在没有既有用户设置时默认使用封面模式；用户仍可在设置中切换为仅文字模式。
-设置中的“展示次序”支持两种方式：时间次序保持周一至周日；更新次序可选择从当天或昨天
-开始按最近更新日倒序，例如周三选择当天时依次展示周三、周二、周一，选择昨天时依次
-展示周二、周一、周日，同一天优先展示较晚的时段和更新时间，默认沿用昨天为准。
-新番表添加后原地标记“已添加”并保留滚动位置，记录日文原名及季度关联以兼容中日译名差异。
-详情页的集数记录每集独占一行，文字和星级可直接修改并自动保存，文本框随内容增高，
-整个记录区可展开/收起且记住选择。
-集数记录仅展示已观看的集数，增加进度时自动保存新看集数的观看时间，可手动修正；
-历史未知时间留空，支持“跳到当前集”。设置中的启动提醒可独立开启当日更新与昨日更新。
-主页番剧卡片支持向左滑动或用鼠标向左拖动，展开扳手编辑与叉号删除按钮。设置的数据管理
-区域也可以在确认后一次清空所有番剧。
+在 [Releases](https://github.com/KAGUYA284/anima-list/releases) 中选择适合自己的版本：
 
-导入 JSON 后会在不覆盖已有字段的前提下，通过 Bangumi 和 yuc.wiki 补齐缺失的 Bangumi ID、
-集数、首播日期、更新星期、具体时间和时段，并把补全结果写回本地存储。单条查询失败不会
-撤销已经成功的导入。
+| 版本 | 使用方法 |
+| --- | --- |
+| Windows 安装版 | 下载 `Anima-List-Setup-1.3.1.exe`，安装后从桌面或开始菜单打开 |
+| Windows 免安装版 | 下载名称带 `Windows-Portable` 的 ZIP，完整解压后运行 `Anima List.exe` |
+| Android | 下载并安装 `Anima-List-v1.3.1-signed.apk` |
+| 网页版 | 下载名称带 `Web` 的 ZIP，完整解压后双击“启动网页版.cmd”，使用期间保留服务窗口；不需要安装 Node.js |
 
-导入时可选“仅添加新番”“保留本地（仅补空资料）”“使用导入记录”。导入、清空和云端
-覆盖前自动保存本机最近三份非空备份，可在设置中恢复；单部番剧删除后 15 秒内可撤销。
-已加入的作品长期保留简介、制作信息、封面地址和资料最后成功更新时间，缩略图全部由后台
-自动下载到 IndexedDB，以三个作品并发逐一补齐，不受列表筛选和番剧状态限制。
-断网时继续显示已有资料和缩略图；图片二进制不进入 JSON 或云同步快照。
+Windows 免安装版日常重启会保留记录，数据目录是程序旁的 `portable-user-data`。项目发布脚本重新部署该目录时会清空这些数据；更新前请导出 JSON，并将下载包解压到新文件夹。下载包不携带个人记录、登录状态或运行缓存；缓存测试版仅用于本地开发，不上传到 Release。
 
-## 跨端云同步
+## 快速上手
 
-生产 Worker 地址已写入共享配置，设置页的“云同步”区域只需注册或登录。注册密码要求为
-8–128 个字符。Web 的 MVP Token 保存在
-localStorage；Electron 使用系统凭据加密能力保存到独立文件；Android 使用 Android Keystore
-生成的 AES-GCM 密钥保存密文。所有平台共享 `sync-service.js` 的 revision 同步状态机。
+下面以 2026 年夏季番《相反的你与我 第二季》为例。Bangumi 对应条目名为 **《相反的你和我 第二季》**，日文名为 `正反対な君と僕 第2期`，首播日期为 2026-07-05。演示截图来自独立本地副本，不包含个人观看记录。
 
-本地每次修改都会写入 `ANIMA_LOCAL_DIRTY` 与 `ANIMA_LAST_UPDATED`。同步比较只使用服务端
-`revision`：云端领先且本地未修改时下载，修订号一致且本地有修改时上传，双方同时修改则
-显示冲突面板，必须明确选择云端、本地覆盖或导出双方 JSON，不按客户端时间静默覆盖。
-普通同步继续阻止空列表覆盖；“初始化云端”仅允许将非空本地上传至空白云端，
-“从云端恢复”允许新设备下载非空云端记录，本地非空时先自动备份。同步操作串行执行，
-上传期间的新编辑保留为待同步；处理冲突时若云端再次变化会重新提示。
+### 1. 添加一部作品
 
-Worker 部署、D1 迁移和密钥配置见 [cloudflare/README.md](cloudflare/README.md)。应用固定连接
-`https://anima-list-api.anima-list-api.workers.dev`；实际 D1 ID 与 JWT 密钥仍不进入仓库。
+1. 点击主页右上角“添加”，搜索“相反的你和我”或日文标题。
+2. 选择带有“第二季／第2期”的条目，核对首播日期和集数。
+3. 跟随播出进度观看时选“追番”；像本例这样补看上季度作品时选“补番”，填写开始观看日期。
+4. 点击“保存”。如果暂时不看，已看集数保持 0，作品会归入“想看”。
 
-代理仅访问固定的 `yuc.wiki` 主机和季度路径，并把远端 HTML 解析成白名单纯文本字段，
-不会执行或向客户端透传页面脚本。当前该站 HTTPS 证书已过期，因此代理暂时从同一
-固定主机的公开 HTTP 页面读取数据；应用到代理的连接仍使用 HTTPS。站点证书恢复后，
-应将抓取传输切回 HTTPS。
+![搜索并选择第二季条目](docs/images/readme-add.png)
 
-## 常用命令
+也可以点击主页设置右侧的日历图标打开新番表，选择“2026 年／夏季”，找到作品后点击“加入待看”。软件会先匹配 Bangumi 条目，再补充资料并检查是否已经添加。
 
-```bash
-npm install            # 安装依赖
+### 2. 更新进度，记录单集感想
 
-npm run dev            # 本地开发（Vite）
-npm run build          # 打包到 dist/（prebuild 会自动同步版本号）
-npm run check          # 质量门禁：lint → test → build → check:dist
+在主页点击作品卡片上的 `+1`，即可记录又看完一集。点击卡片进入详情，可以用 `−`、`+` 调整进度，也可以点击右上角扳手编辑资料。
 
-npm run sync           # 打包并 `cap sync` 到原生工程（Android/iOS）
-npm run android:release# 生成发布密钥并出 Android release APK
-npm run desktop:preview# 打包并用 electron-builder 出便携版目录
-npm run desktop:installer# 打包并生成 Windows NSIS 安装程序
-npm run release:package# 将已构建产物整理为统一发布目录
-npm run release:all   # 检查并构建、整理 Windows / Android / Web 全部产物
-npm run cloud:install # 安装 Cloudflare Worker 锁定依赖
-npm run cloud:check   # Worker TypeScript 检查与测试
-```
+本例先保存为已看 2 集，再在主页点击一次 `+1`，进度变为 **3/13**。因为在秋季开始补看夏季作品，当前记录显示在秋季列表中。
 
-## 发布目录
+在“集数记录”中，为已经看过的集数填写感想、点亮星级，并按需要修改观看时间。内容会自动保存；记录较多时，可以收起整个区域，或用“跳到当前集”直接定位。
 
-v1.3.1 的内置说明见 [软件使用说明](docs/软件使用说明.md)，软件入口位于设置页最下方。首次启动且没有番剧记录时自动打开，目录默认折叠；关闭后可随时从设置再次查看。
+![第三集感想、五星评分与自动记录的观看时间](docs/images/readme-episode-notes.png)
 
-`npm run release:all` 完成后，当前版本统一放在 `发布版本/v1.3.1/`：
+主页左滑卡片（电脑端用鼠标向左拖动）可以展开齿轮编辑和删除按钮。删除后提示条保留 15 秒撤销入口。
+
+### 3. 按自己的习惯整理
+
+- **封面或文字列表**：设置 → 列表显示。
+- **更新排序**：设置 → 番剧信息 → 展示次序；可从当天或昨天起，优先显示最近更新的作品。
+- **启动提醒**：设置 → 启动提醒；当日和昨日可以同时开启。
+- **资料不完整**：设置 → 数据管理 → 更新番剧信息 → 更新全部。
+- **查看使用说明**：设置页最下方。首次使用且没有番剧时会自动打开，目录默认折叠。
+
+追番在看时随预计播出进度跨季移动，已看完后回到首播季度；补番在看时显示在当前季度，完成后按看完日期归档。想看、搁置和放弃按首播季度归档。
+
+### 4. 备份或换设备
+
+在“设置 → 数据管理”导出 JSON，可在另一台设备导入。导入时可选“仅添加新番”“保留本地”或“使用导入记录”；默认保留本地进度与感想，只补充空缺资料。
+
+需要云同步时，在“设置 → 云同步”用邮箱注册并登录，密码为 8～128 个字符：
+
+1. 首次上传非空本地记录，使用“初始化云端”。
+2. 新设备登录同一账号后，使用“从云端恢复”。
+3. 日常修改会尝试自动同步，也可点击“立即同步”；出现冲突时，查看云端上次同步时间，再选择使用哪份记录。
+
+普通同步保留空数据保护。导入、清空和云端覆盖等操作前会自动备份，可在设置中恢复最近 3 份非空记录。更多操作见[完整使用说明](docs/软件使用说明.md)。
+
+---
+
+## 项目结构
+
+以下内容面向开发者。项目使用 **Vanilla JavaScript + ES Modules + Vite**，共享前端位于 `www/`，通过 Electron 提供 Windows 应用，通过 Capacitor 提供 Android 应用，同时保留独立网页版。
 
 ```text
-发布版本/v1.3.1/
-├─ Windows/
-│  ├─ 安装版/Anima-List-Setup-1.3.1.exe
-│  ├─ 免安装版/Anima List v1.3.1/（目录版）
-│  └─ 缓存测试版/Anima List v1.3.1 缓存测试版/（目录版）
-├─ Android/Anima-List-v1.3.1-signed.apk
-├─ Web/
-│  ├─ 启动网页版.cmd
-│  ├─ server.ps1
-│  └─ web/
-└─ 版本说明.txt
+anima-list/
+├─ www/                         共享前端源码
+│  ├─ index.html                页面入口和启动兜底
+│  ├─ css/styles.css            浅色/深色、响应式布局与组件样式
+│  └─ js/
+│     ├─ app.js                 启动、提醒、缓存队列与平台返回行为
+│     ├─ renderer/              列表、详情、表单、设置、新番表模板
+│     ├─ events/                对应页面的交互与事件绑定
+│     ├─ store.js               应用状态、增删改和设置
+│     ├─ data.js / storage.js   数据规范化、导入导出与本地持久化
+│     ├─ grouping.js            追番/补番的动态季度归类
+│     ├─ list-order.js          列表展示次序
+│     ├─ api.js / yuc.js        数据请求、缓存、季度页解析与作品映射
+│     ├─ seasonal-import.js     新番表添加与去重
+│     ├─ import-enrichment.js   导入记录的缺失资料补全
+│     ├─ metadata-refresh.js    已加入作品的资料刷新
+│     ├─ library-cache.js       长期资料与 IndexedDB 缩略图缓存
+│     ├─ backups.js             操作前备份
+│     ├─ sync-*.js              云同步请求、决策与本地同步状态
+│     ├─ secure-storage.js      各平台凭据存储适配
+│     └─ user-guide*.js         内置说明弹窗与 Markdown 渲染
+├─ electron/                    Windows 外壳、数据目录和受限 IPC
+├─ android/                     Capacitor Android 原生工程
+├─ cloudflare/                  Hono + D1 云同步服务、迁移与测试
+├─ scf_bangumi_proxy.js          腾讯云 Bangumi/图片代理和 yuc 解析
+├─ scripts/                     版本同步、检查、构建与发布整理
+├─ tests/                       node:test 测试
+├─ docs/                        使用说明、工作记录、架构文档与截图
+└─ .github/workflows/ci.yml      GitHub Actions 检查
 ```
 
-正式免安装版直接进入目录运行 `Anima List.exe`，数据保存在旁边的 `portable-user-data/`；
-正常关闭再启动会保留数据，重新部署更新时清空，更新前请导出 JSON。缓存测试版会把缓存、
-Local Storage 和 IndexedDB 固定保存在同目录的 `test-user-data/` 中；首次启动会创建
-该目录，后续启动及重新整理发布包会保留缓存，删除该目录即可重置。网页版双击 `启动网页版.cmd` 即可运行，
-不依赖 Node.js。
+`renderer.js` 和 `events.js` 保留为兼容导出入口，具体逻辑分别放在对应子目录。仓库目前提供 Windows、Android 和 Web 产物；iOS 仅保留 Capacitor 依赖与相关命令，尚无原生工程或发布包。
 
-## 版本号单一来源
+### 页面与数据流
 
-`package.json` 的 `version` 是**唯一权威来源**。`npm run build`
-的 `prebuild` 钩子会执行 `scripts/sync-version.mjs`，把版本号写入：
+```text
+页面交互（events） → 状态修改（store） → 规范化与本地保存（data / storage）
+                          ↓
+                    页面渲染（renderer）
+```
 
-- `www/js/constants.js` → `APP_VERSION`
-- `android/app/build.gradle` → `versionName`
+观看记录与设置使用 localStorage；封面缩略图二进制使用 IndexedDB。网络请求负责补充资料，不阻塞已保存记录的离线使用。JSON 导出保留资料文本和封面地址，云同步主要保存观看记录，两者都不携带图片二进制。
 
-`npm run lint`（`check-source.mjs`）会强校验三处一致，不一致即报错。
-`versionCode`（Android 内部版本号）需在 `build.gradle` 中**人工递增**。
+### 番剧数据来源
 
-## 发布 Checklist
+| 来源 | 主要用途 |
+| --- | --- |
+| [Bangumi](https://bgm.tv/) | 规范标题、条目 ID、集数、封面、简介、角色与声优 |
+| [yuc.wiki](https://yuc.wiki/) | 季度新番表、播出日期、每周更新时间与时段、制作人员信息 |
 
-发布前按顺序执行：
+新番表添加优先使用 yuc 日文标题搜索 Bangumi，中文标题兜底，以 Bangumi ID 和作品关联信息去重。yuc 季度页从 `201910` 起支持，早于 2019 年秋季显示“无数据”。
 
-1. **改版本**：在 `package.json` 里更新 `version`（如 `1.3.0` → `1.3.1`）。
-2. **递增 versionCode**：在 `android/app/build.gradle` 手动 +1。
-3. **同步版本号**：`npm run sync:version`（`prebuild` 也会自动跑）。
-4. **过门禁**：`npm run check` 全绿（lint + test + build + dist 校验）。
-5. **代理**：如改动 `scf_bangumi_proxy.js`，重新部署腾讯云 SCF，并确认
-   `/yuc/anime`、Bangumi API 和图片代理均在线生效。
-   - 推荐运行时：Node.js 16.13 或 Node.js 18。
-   - 源文件名为 `scf_bangumi_proxy.js` 时，函数入口使用
-     `scf_bangumi_proxy.main_handler`；若部署为 `index.js`，入口使用
-     `index.main_handler`。
-   - 只上传原始 JavaScript 文件，不要把 Markdown 代码围栏或说明文字粘贴到函数源码。
-6. **出多端产物**：执行 `npm run release:all`。Android 签名需要
-   `android/keystore.properties`，格式见 `keystore.properties.example`。
-7. **冒烟测试**：安装 APK / 运行便携版，验证列表、详情、导入导出、图片代理正常。
-8. **核对归档**：确认 `发布版本/v<版本号>/` 中的安装版、两种免安装版、APK
-   和 Web 启动器齐全。
+Bangumi 请求按设置选择直连或代理优先，失败后尝试另一条路径。yuc 在 Electron 中由主进程读取固定季度页；Web/移动端先尝试直连，失败时使用腾讯云代理。当前 Electron/SCF 抓取实现使用固定 `yuc.wiki` 主机的 HTTP 页面，客户端与云代理之间使用 HTTPS。
 
-## 安全约定（由 `check-source.mjs` 守卫）
+### 云同步与本地数据
 
-- Gradle 不得出现明文 `storePassword` / `keyPassword`（走 `keystore.properties` 或环境变量）。
-- AndroidManifest 不得含 `MANAGE_EXTERNAL_STORAGE` / `requestLegacyExternalStorage` / 明文流量。
-- Electron 便携版必须启用 `contextIsolation` / 禁用 `nodeIntegration` / 开启 `sandbox`。
+`cloudflare/` 使用 Cloudflare Workers、Hono 和 D1，提供注册、登录和按服务端 `revision` 检测冲突的快照同步。客户端共享 `sync-service.js`，不使用设备时钟决定覆盖方向。
+
+Electron 通过系统加密凭据存储保存 Token，Android 使用 Keystore，Web 使用 localStorage。后端部署、D1 迁移、Origin 白名单和 JWT 密钥配置见 [Cloudflare 部署说明](cloudflare/README.md)。
+
+## 本地开发
+
+安装 Node.js 20 或更新版本，然后执行：
+
+```bash
+npm ci
+npm run dev
+```
+
+Vite 默认地址为 `http://localhost:5173`。
+
+| 命令 | 用途 |
+| --- | --- |
+| `npm run check` | 源码检查、自动化测试、Web 构建和构建产物检查 |
+| `npm run build` | 将共享前端构建到 `dist/` |
+| `npm run desktop` | 构建并启动 Electron |
+| `npm run desktop:preview` | 生成 Windows 免安装目录 `Anima List/` |
+| `npm run desktop:installer` | 生成 Windows NSIS 安装程序 |
+| `npm run sync` | 构建前端并同步到 Capacitor 原生工程 |
+| `npm run android:release` | 构建已签名 Android Release APK |
+| `npm run release:package` | 将已有构建产物整理到统一发布目录 |
+| `npm run release:all` | 检查、构建并整理 Windows / Android / Web 产物 |
+| `npm run cloud:install` | 安装云同步服务依赖 |
+| `npm run cloud:check` | 云同步服务 TypeScript 检查与测试 |
+
+Android 构建需要 JDK 17、Android SDK 35，以及本机签名配置。签名格式参考 [android/keystore.properties.example](android/keystore.properties.example)。
+
+## 版本与发布
+
+`package.json` 的 `version` 是应用版本来源。`npm run sync:version` 会同步 `APP_VERSION` 和 Android `versionName`，构建前也会自动执行；Android `versionCode` 需要手动递增。Electron/SCF 请求标识及云服务包版本在发版时同步维护。
+
+构建产物与源码分开：
+
+```text
+dist/                          Web 构建结果
+Anima List/                    Windows 免安装构建结果
+.desktop-build/                Windows 安装程序与中间产物
+发布版本/v1.3.1/
+├─ Windows/安装版/              NSIS 安装程序
+├─ Windows/免安装版/            完整程序目录
+├─ Windows/缓存测试版/          独立保存测试数据的完整程序目录
+├─ Android/                     已签名 APK
+└─ Web/                         启动脚本、本地服务与静态资源
+```
+
+修改共享功能后，同步更新 Windows、Android 和 Web 产物。仅修改 README 或截图时不需要重新打包客户端。
+
+生产 `wrangler.toml`、JWT 密钥、Android 签名文件与密码配置、`local.properties`、运行数据和构建目录均不提交到 Git。部署配置使用仓库中的示例文件；Release 仅上传 Windows 安装版、正式免安装版、Android 和 Web，不上传缓存测试版，并排除 `portable-user-data`、`test-user-data` 及其他运行缓存。
+
+腾讯云代理代码有变更时需要单独重新部署，入口为 `scf_bangumi_proxy.main_handler`；部署为 `index.js` 时使用 `index.main_handler`。
+
+更多背景资料：[软件使用说明](docs/软件使用说明.md) · [累计工作内容](docs/工作内容说明.md) · [架构分析](docs/architecture/项目解读分析与改进建议.md)
